@@ -1,0 +1,61 @@
+name: memoire_de_lart
+description: Une couleur par jour, une œuvre par mois.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Navigation
+  go_router: ^14.0.0
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # Fonts
+  google_fonts: ^6.2.1
+
+  # Camera & image
+  camera: ^0.11.0
+  image_picker: ^1.1.2
+  image_cropper: ^12.2.1
+  flutter_image_compress: ^2.4.0
+
+  # SVG
+  flutter_svg: ^2.0.10+1
+
+  # Storage & prefs
+  shared_preferences: ^2.3.1
+  flutter_secure_storage: ^9.2.2
+
+  # Networking
+  dio: ^5.7.0
+
+  # Notifications
+  flutter_local_notifications: ^17.2.2
+
+  # Permissions
+  permission_handler: ^11.3.1
+
+  path_provider: ^2.1.4
+
+  # Utils
+  intl: ^0.19.0
+  timezone: ^0.9.4
+  share_plus: ^10.0.2
+  cached_network_image: ^3.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/

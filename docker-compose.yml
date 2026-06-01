@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+  # ── API ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: /mnt/user/memoire-de-lart/backend
+    restart: unless-stopped
+    ports:
+      - "${PORT_API:-3000}:3000"
+    environment:
+      DATABASE_URL:        postgres://mda:${POSTGRES_PASSWORD}@db:5432/mda
+      JWT_SECRET:          ${JWT_SECRET}
+      STORAGE_ENDPOINT:    minio
+      STORAGE_PORT:        9000
+      STORAGE_USE_SSL:     "false"
+      STORAGE_ACCESS_KEY:  ${MINIO_ACCESS_KEY}
+      STORAGE_SECRET_KEY:  ${MINIO_SECRET_KEY}
+      STORAGE_BUCKET:      memoire-de-lart
+      CORS_ORIGINS:        ${CORS_ORIGINS:-http://localhost:3001}
+      ADMIN_TOKEN:         ${ADMIN_TOKEN}
+      COLOR_DELTA_PERFECT: 25
+      COLOR_DELTA_ACCEPT:  55
+      NODE_ENV:            production
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  # ── Admin panel ───────────────────────────────────────────────
+  admin:
+    build:
+      context: /mnt/user/memoire-de-lart/admin
+    restart: unless-stopped
+    ports:
+      - "${PORT_ADMIN:-3001}:80"
+    depends_on:
+      - api
+
+  # ── PostgreSQL ────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     mda
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       mda
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Schema applied automatically on first start
+      - /mnt/user/memoire-de-lart/backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mda"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO (object storage) ────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "${PORT_MINIO_API:-9000}:9000"
+      - "${PORT_MINIO_CONSOLE:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+
+volumes:
+  pg_data:
+  minio_data:

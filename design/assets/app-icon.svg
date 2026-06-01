@@ -1,0 +1,29 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="230" fill="#FBF8F1"></rect>
+  <rect x="120" y="120" width="784" height="784" rx="120" fill="#F4EEE1"></rect>
+  <rect x="152.0" y="152.0" width="130" height="130" rx="16" fill="#EBE3D2"></rect>
+  <rect x="299.5" y="152.0" width="130" height="130" rx="16" fill="#EBE3D2"></rect>
+  <rect x="447.0" y="152.0" width="130" height="130" rx="16" fill="#4A5763"></rect>
+  <rect x="594.5" y="152.0" width="130" height="130" rx="16" fill="#2D5FA6"></rect>
+  <rect x="742.0" y="152.0" width="130" height="130" rx="16" fill="#2D5FA6"></rect>
+  <rect x="152.0" y="299.5" width="130" height="130" rx="16" fill="#EBE3D2"></rect>
+  <rect x="299.5" y="299.5" width="130" height="130" rx="16" fill="#2E7D5B"></rect>
+  <rect x="447.0" y="299.5" width="130" height="130" rx="16" fill="#2A8C8A"></rect>
+  <rect x="594.5" y="299.5" width="130" height="130" rx="16" fill="#2D5FA6"></rect>
+  <rect x="742.0" y="299.5" width="130" height="130" rx="16" fill="#34408C"></rect>
+  <rect x="152.0" y="447.0" width="130" height="130" rx="16" fill="#D69A3C"></rect>
+  <rect x="299.5" y="447.0" width="130" height="130" rx="16" fill="#7E8B3F"></rect>
+  <rect x="447.0" y="447.0" width="130" height="130" rx="16" fill="#2E7D5B"></rect>
+  <rect x="594.5" y="447.0" width="130" height="130" rx="16" fill="#2A8C8A"></rect>
+  <rect x="742.0" y="447.0" width="130" height="130" rx="16" fill="#EBE3D2"></rect>
+  <rect x="152.0" y="594.5" width="130" height="130" rx="16" fill="#E8B53C"></rect>
+  <rect x="299.5" y="594.5" width="130" height="130" rx="16" fill="#D69A3C"></rect>
+  <rect x="447.0" y="594.5" width="130" height="130" rx="16" fill="#7E8B3F"></rect>
+  <rect x="594.5" y="594.5" width="130" height="130" rx="16" fill="#EBE3D2"></rect>
+  <rect x="742.0" y="594.5" width="130" height="130" rx="16" fill="#EBE3D2"></rect>
+  <rect x="152.0" y="742.0" width="130" height="130" rx="16" fill="#D7472F"></rect>
+  <rect x="299.5" y="742.0" width="130" height="130" rx="16" fill="#9C5A33"></rect>
+  <rect x="447.0" y="742.0" width="130" height="130" rx="16" fill="#D69A3C"></rect>
+  <rect x="594.5" y="742.0" width="130" height="130" rx="16" fill="#EBE3D2"></rect>
+  <rect x="742.0" y="742.0" width="130" height="130" rx="16" fill="#EBE3D2"></rect>
+</svg>

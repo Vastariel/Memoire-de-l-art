@@ -1,0 +1,198 @@
+/* ============================================================
+   Mémoire de l'art — Foundations
+   Type + Color tokens (light + dark), shared by every surface.
+   Fonts: Spectral (serif display) + Hanken Grotesk (UI sans)
+   loaded from Google Fonts. If shipping offline, drop the TTFs
+   in /fonts and swap the @import for @font-face.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ---- Font families ---- */
+  --font-serif: 'Spectral', Georgia, 'Times New Roman', serif;
+  --font-sans:  'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* ---- Warm neutral ramp (the "paper") ---- */
+  --cream-50:  #FBF8F1;
+  --cream-100: #F4EEE1;
+  --cream-200: #EBE3D2;
+  --cream-300: #DCD2BC;
+  --cream-400: #C7BBA0;
+
+  --ink-900: #1C1813;  /* near-black, warm */
+  --ink-700: #3B342A;
+  --ink-500: #6C6354;
+  --ink-400: #8B8273;
+  --ink-300: #A89E8C;
+
+  /* ---- Brand accent (used sparingly; the art supplies the rest) ---- */
+  --clay-600: #A84B27;  /* pressed */
+  --clay-500: #BC5A2E;  /* primary brand accent — terracotta/sienna */
+  --clay-400: #CE7551;
+  --clay-100: #F0DACD;
+
+  /* ---- Pigment palette — the "couleur du jour" set ---- */
+  --pig-vermillion:  #D7472F;
+  --pig-sienna:      #9C5A33;
+  --pig-ochre:       #D69A3C;
+  --pig-saffron:     #E8B53C;
+  --pig-olive:       #7E8B3F;
+  --pig-viridian:    #2E7D5B;
+  --pig-teal:        #2A8C8A;
+  --pig-cobalt:      #2D5FA6;
+  --pig-ultramarine: #34408C;
+  --pig-aubergine:   #6E3A6B;
+  --pig-rose:        #C45B7C;
+  --pig-slate:       #4A5763;
+
+  /* ---- Semantic / status ---- */
+  --ok:    #3F8E5C;
+  --warn:  #C98A2E;
+  --error: #C0432C;
+
+  /* ---- Surfaces (LIGHT, default) ---- */
+  --paper:        var(--cream-50);
+  --surface:      #FFFEFB;
+  --surface-sunk: var(--cream-100);
+  --fg1: var(--ink-900);   /* primary text */
+  --fg2: var(--ink-500);   /* secondary text */
+  --fg3: var(--ink-300);   /* tertiary / placeholder */
+  --on-accent: #FBF8F1;
+  --line:        rgba(28, 24, 19, 0.12);
+  --line-strong: rgba(28, 24, 19, 0.22);
+  --accent: var(--clay-500);
+  --accent-press: var(--clay-600);
+  --mosaic-empty: var(--cream-200);
+
+  /* ---- Elevation (warm, low, diffuse) ---- */
+  --shadow-sm: 0 1px 2px rgba(40, 30, 18, 0.06), 0 1px 3px rgba(40, 30, 18, 0.05);
+  --shadow-md: 0 4px 12px rgba(40, 30, 18, 0.08), 0 1px 3px rgba(40, 30, 18, 0.06);
+  --shadow-lg: 0 14px 40px rgba(40, 30, 18, 0.14), 0 4px 10px rgba(40, 30, 18, 0.07);
+
+  /* ---- Radii ---- */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+  --r-pill: 999px;
+
+  /* ---- Spacing scale (4pt base) ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 160ms;
+  --dur: 280ms;
+  --dur-slow: 620ms;
+}
+
+/* ============================================================
+   DARK MODE — warm, like a dimmed gallery. Not pure black.
+   Apply by setting data-theme="dark" on a wrapper or <html>.
+   ============================================================ */
+[data-theme="dark"] {
+  --paper:        #161310;
+  --surface:      #211C17;
+  --surface-sunk: #110E0B;
+  --fg1: #F0E9DB;
+  --fg2: #B3A892;
+  --fg3: #7C7363;
+  --on-accent: #1C1813;
+  --line:        rgba(240, 233, 219, 0.12);
+  --line-strong: rgba(240, 233, 219, 0.22);
+  --accent: var(--clay-400);
+  --accent-press: var(--clay-500);
+  --mosaic-empty: #2A241D;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.40);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+/* ============================================================
+   SEMANTIC TYPE TOKENS
+   Use these classes (or copy the rules) instead of ad-hoc sizes.
+   ============================================================ */
+.t-display {        /* hero artwork title, reveal screen */
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 40px;
+  line-height: 1.06;
+  letter-spacing: -0.01em;
+  color: var(--fg1);
+}
+.t-h1 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 1.14;
+  letter-spacing: -0.005em;
+  color: var(--fg1);
+}
+.t-h2 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--fg1);
+}
+.t-serif-italic {   /* artist names, captions in gallery voice */
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--fg2);
+}
+.t-title {          /* UI section titles, list rows */
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--fg1);
+}
+.t-body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--fg1);
+}
+.t-body-sm {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--fg2);
+}
+.t-caption {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--fg2);
+}
+.t-overline {       /* "COULEUR DU JOUR", labels */
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg2);
+}
+.t-num {            /* day counters: 12 / 30 */
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--fg1);
+}
