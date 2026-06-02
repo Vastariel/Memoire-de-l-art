@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'models/artwork.dart';
@@ -189,18 +190,10 @@ class _MdaAppState extends ConsumerState<MdaApp> {
       _applyInstanceData(result.instance);
       if (mounted) setState(() => _route = AppRoute.daily);
     } catch (_) {
-      // Fallback: demo mode without backend
-      final demoCode = code ?? 'DEMO';
-      final demoName = name.isEmpty ? demoCode : name;
-      await SessionManager.instance.addOrUpdate(SavedInstance(
-        code: demoCode, name: demoName, pseudo: pseudo, avatarPigment: 'sienna'));
-      _stubApply(pseudo, demoCode, demoName);
-      if (mounted) {
-        setState(() {
-          _route    = AppRoute.daily;
-          _apiError = 'Serveur inaccessible — données de démo.';
-        });
-      }
+      // Fallback: switch to (or create) local solo session
+      await _onSolo(pseudo, null);
+      if (mounted) setState(() =>
+        _apiError = 'Serveur inaccessible — mode local activé. Reconnecte dans les paramètres.');
     }
   }
 
@@ -296,6 +289,26 @@ class _MdaAppState extends ConsumerState<MdaApp> {
       photoUrl = await persistPhoto(capture.photoPath, zone.id);
     }
 
+    // For online instances, submit photo to server for server-side validation
+    if (!_isSolo && photoUrl != null) {
+      try {
+        final client = await ApiClient.get();
+        await client.submitPhoto(photoPath: photoUrl, zoneId: zone.id);
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 422 && mounted) {
+          final delta = (e.response?.data?['match']?['delta'] as num?)?.toInt() ?? 0;
+          final proceed = await _showRejectionDialog(delta);
+          if (!proceed) {
+            setState(() => _route = AppRoute.camera);
+            return;
+          }
+        }
+        // Other server errors: continue with local save (graceful degradation)
+      } catch (_) {
+        // Network error: continue locally
+      }
+    }
+
     final contribution = ZoneContribution(
       playerPseudo:  me.pseudo,
       playerAvatar:  me.avatarPigment,
@@ -306,17 +319,40 @@ class _MdaAppState extends ConsumerState<MdaApp> {
     _artwork.zones[zone.id] = zone.copyWith(isToday: false, contribution: contribution);
 
     if (_isSolo) {
-      // Persist contributions to SharedPreferences
       final contribs = <String, ZoneContribution>{};
       for (final entry in _artwork.zones.entries) {
         if (entry.value.contribution != null) contribs[entry.key] = entry.value.contribution!;
       }
       await saveContributions(contribs);
-      // Mark the next zone as today's
       _assignTodayZoneSolo();
     }
 
     if (mounted) setState(() => _route = AppRoute.daily);
+  }
+
+  Future<bool> _showRejectionDialog(int delta) async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Couleur éloignée de la cible'),
+        content: Text(
+          'L\'écart de couleur est de $delta — la photo ne correspond pas exactement.\n\n'
+          'Tu peux retourner photographier quelque chose de plus proche, ou publier quand même.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Reprendre la photo'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Publier quand même'),
+          ),
+        ],
+      ),
+    ) ?? false;
   }
 
   // ── Instance switching ────────────────────────────────────────

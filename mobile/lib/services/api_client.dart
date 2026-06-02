@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _defaultBaseUrl = 'https://api.memoiredelart.fr'; // override in Advanced Settings
+const _defaultBaseUrl = 'https://mda.vastariel.fr';
 
 class ApiClient {
   ApiClient._({required FlutterSecureStorage storage, required String baseUrl})
@@ -26,6 +26,22 @@ class ApiClient {
 
   // Call after updating custom server URL
   static void reset() => _instance = null;
+
+  // Test reachability — returns true if the server responds with 200
+  static Future<bool> testConnection(String url) async {
+    try {
+      final base = url.trim().isEmpty ? _defaultBaseUrl : url.trim();
+      final dio = Dio(BaseOptions(
+        baseUrl: base,
+        connectTimeout: const Duration(seconds: 6),
+        receiveTimeout: const Duration(seconds: 6),
+      ));
+      final res = await dio.get<dynamic>('/health');
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 
   static Dio _buildDio(String base, FlutterSecureStorage storage) {
     final dio = Dio(BaseOptions(

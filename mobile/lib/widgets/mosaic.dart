@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../models/artwork.dart';
@@ -7,25 +6,6 @@ import '../models/zone.dart';
 import '../theme/colors.dart';
 import '../theme/theme.dart';
 
-// Deterministic per-cell jitter — matches the JS hash() in mosaic.jsx.
-double _hash(int i) {
-  final x = math.sin(i * 127.1) * 43758.5453;
-  return x - x.floor();
-}
-
-// Build a filled-cell gradient that mimics a photo texture.
-LinearGradient _fillGradient(Color base, int cellIndex) {
-  final j = (_hash(cellIndex) - 0.5) * 0.22;
-  final hi  = base.lighten(j.abs() + 0.16);
-  final lo  = base.darken(0.14 - j.clamp(-0.14, 0.0));
-  final angle = (135 + (_hash(cellIndex + 9) * 90).round()) * math.pi / 180;
-  return LinearGradient(
-    begin: Alignment(math.cos(angle), math.sin(angle)),
-    end:   Alignment(-math.cos(angle), -math.sin(angle)),
-    colors: [hi, base, lo],
-    stops: const [0, 0.55, 1],
-  );
-}
 
 class MosaicWidget extends StatefulWidget {
   final Artwork artwork;
@@ -118,10 +98,13 @@ class _MosaicWidgetState extends State<MosaicWidget>
     return AspectRatio(
       aspectRatio: a.cols / a.rows,
       child: LayoutBuilder(builder: (_, constraints) {
-        final cellW = (constraints.maxWidth - widget.gap * (a.cols - 1)) / a.cols;
+        // Cap gap at 12% of cell width so it doesn't dominate for fine grids
+        final rawCellW = constraints.maxWidth / a.cols;
+        final effectiveGap = (rawCellW * 0.12).clamp(0.3, widget.gap);
+        final cellW = (constraints.maxWidth - effectiveGap * (a.cols - 1)) / a.cols;
         return Wrap(
-          spacing: widget.gap,
-          runSpacing: widget.gap,
+          spacing: effectiveGap,
+          runSpacing: effectiveGap,
           children: a.cells.map((cell) {
             final zone = a.zoneForCell(cell);
             return _MosaicCell(
@@ -254,27 +237,25 @@ class _MosaicCellState extends State<_MosaicCell>
         animation: _revealCtrl,
         builder: (_, __) {
           final t = CurvedAnimation(parent: _revealCtrl, curve: MdaCurve.easeOut).value;
-          final gradientCell = Container(
+
+          // Flat solid colour — clean look on full mosaic view (no gradient)
+          final flatCell = Container(
             width: widget.size, height: widget.size,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(widget.radius),
-              gradient: _fillGradient(pigColor, widget.cell.index),
-              boxShadow: const [
-                BoxShadow(color: Color(0x19000000), blurRadius: 0, spreadRadius: 0.5),
-              ],
+              color: pigColor,
             ),
           );
 
-          // Gradient fades out as photos reveal (stays visible as fallback behind photo)
-          final gradientOpacity = t * (1.0 - widget.photoRevealFactor * 0.6);
+          final flatOpacity = t * (1.0 - widget.photoRevealFactor * 0.8);
           Widget base = Opacity(
-            opacity: gradientOpacity,
-            child: Transform.scale(scale: 0.55 + 0.45 * t, child: gradientCell),
+            opacity: flatOpacity,
+            child: Transform.scale(scale: 0.55 + 0.45 * t, child: flatCell),
           );
 
           if (!hasPhoto) return base;
 
-          // Photo fades in continuously as zoom increases (driven by parent setState)
+          // Photo fades in as zoom increases; vignette adds depth when zoomed
           return Stack(
             children: [
               base,
@@ -282,9 +263,30 @@ class _MosaicCellState extends State<_MosaicCell>
                 opacity: widget.photoRevealFactor.clamp(0.0, 1.0),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(widget.radius),
-                  child: _PhotoImage(
-                    url: photoUrl, size: widget.size,
-                    radius: widget.radius, fallback: gradientCell),
+                  child: Stack(
+                    children: [
+                      _PhotoImage(
+                        url: photoUrl, size: widget.size,
+                        radius: widget.radius, fallback: flatCell),
+                      // Radial vignette visible only when photos are revealed
+                      if (widget.photoRevealFactor > 0.2)
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(widget.radius),
+                              gradient: RadialGradient(
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.black.withAlpha(
+                                    (0x55 * widget.photoRevealFactor).round()),
+                                ],
+                                stops: const [0.45, 1.0],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ],

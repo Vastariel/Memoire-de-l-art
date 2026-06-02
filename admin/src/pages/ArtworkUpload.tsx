@@ -22,8 +22,7 @@ export const ArtworkUpload: React.FC = () => {
   const [dragOver,    setDragOver]    = useState(false);
   const [file,        setFile]        = useState<File | null>(null);
   const [imgSize,     setImgSize]     = useState<ImgSize | null>(null);
-  const [targetCells, setTargetCells] = useState(252); // ~14×18
-  const [numZones,    setNumZones]    = useState(16);  // k-means clusters
+  const [numZones, setNumZones] = useState(16);  // k-means clusters
   const [meta,        setMeta]        = useState<{
     title?: string; artist?: string; year?: number; description?: string;
   }>({});
@@ -44,19 +43,19 @@ export const ArtworkUpload: React.FC = () => {
     img.src = url;
   }, [file]);
 
-  // Compute block size from image dimensions + target cells slider
+  // Auto block size: target ~2000 cells (matches backend AUTO_TARGET_CELLS)
+  const AUTO_TARGET = 2000;
   const blockSize = useMemo(() => {
     if (!imgSize) return 16;
-    const bs = Math.round(Math.sqrt((imgSize.w * imgSize.h) / targetCells));
-    return Math.max(4, bs);
-  }, [imgSize, targetCells]);
+    return Math.max(4, Math.round(Math.sqrt((imgSize.w * imgSize.h) / AUTO_TARGET)));
+  }, [imgSize]);
 
   const gridCols = useMemo(() =>
-    imgSize ? Math.min(Math.max(Math.round(imgSize.w / blockSize), 4), 32) : 0,
+    imgSize ? Math.max(4, Math.round(imgSize.w / blockSize)) : 0,
   [imgSize, blockSize]);
 
   const gridRows = useMemo(() =>
-    imgSize ? Math.min(Math.max(Math.round(imgSize.h / blockSize), 4), 40) : 0,
+    imgSize ? Math.max(4, Math.round(imgSize.h / blockSize)) : 0,
   [imgSize, blockSize]);
 
   const totalCells = gridCols * gridRows;
@@ -118,7 +117,6 @@ export const ArtworkUpload: React.FC = () => {
   const reset = () => {
     setStep(0); setFile(null); setImgSize(null);
     setSegResult(null); setMeta({}); setPublished(null);
-    setTargetCells(252);
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -188,49 +186,24 @@ export const ArtworkUpload: React.FC = () => {
                 </Col>
               </Row>
 
-              {/* Grid fineness */}
-              <div style={{ padding: '0 8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between',
-                  fontSize: 12, color: '#999', marginBottom: 4 }}>
-                  <span>Mosaïque grossière</span>
-                  <span>Mosaïque fine</span>
-                </div>
-                <Slider
-                  min={60}
-                  max={600}
-                  value={targetCells}
-                  onChange={setTargetCells}
-                  tooltip={{ formatter: v => `~${v} cellules` }}
-                  marks={{
-                    60:  'XS',
-                    150: 'S',
-                    252: 'M',
-                    400: 'L',
-                    600: 'XL',
-                  }}
-                />
-                <p style={{ color: '#999', fontSize: 12, marginTop: 8 }}>
-                  Taille du bloc : {blockSize} px — une cellule = 1 carré dans la mosaïque.
-                </p>
-              </div>
-
               {/* Number of colour zones */}
               <div style={{ padding: '0 8px', marginTop: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between',
                   fontSize: 12, color: '#999', marginBottom: 4 }}>
                   <span>Peu de couleurs</span>
-                  <span>Palette riche</span>
+                  <span>Palette très riche</span>
                 </div>
                 <Slider
                   min={8}
-                  max={24}
+                  max={120}
                   value={numZones}
                   onChange={setNumZones}
-                  tooltip={{ formatter: v => `${v} couleurs` }}
-                  marks={{ 8: '8', 12: '12', 16: '16', 20: '20', 24: '24' }}
+                  tooltip={{ formatter: (v?: number) => `${v ?? 0} couleurs` }}
+                  marks={{ 8: '8', 24: '24', 50: '50', 80: '80', 120: '120' }}
                 />
                 <p style={{ color: '#999', fontSize: 12, marginTop: 8 }}>
-                  Nombre de zones colorées dans la mosaïque (k-means). 16 est un bon équilibre.
+                  Couleurs extraites par k-means sur l'image originale.
+                  50–80 donne un bon rendu pour des œuvres riches. Plus de zones = plus de joueurs nécessaires.
                 </p>
               </div>
 

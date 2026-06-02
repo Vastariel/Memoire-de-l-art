@@ -80,14 +80,12 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post('/artworks/segment', { onRequest: [requireAdmin] }, async (req, reply) => {
     let fileBuffer: Buffer | null = null;
-    let blockSize  = 16;
     let numZones   = 16;
 
     const parts = req.parts();
     for await (const part of parts) {
       if (part.type === 'field') {
-        if (part.fieldname === 'blockSize') blockSize = parseInt(part.value as string) || 16;
-        if (part.fieldname === 'numZones')  numZones  = Math.min(24, Math.max(8, parseInt(part.value as string) || 16));
+        if (part.fieldname === 'numZones') numZones = Math.min(120, Math.max(8, parseInt(part.value as string) || 16));
       } else if (part.type === 'file') {
         const chunks: Buffer[] = [];
         for await (const chunk of part.file) chunks.push(chunk);
@@ -97,7 +95,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
     if (!fileBuffer) return reply.code(400).send({ error: 'Image manquante.' });
 
-    const result = await segmentArtwork(fileBuffer, blockSize, numZones);
+    const result = await segmentArtwork(fileBuffer, numZones);
     return reply.send(result);
   });
 
@@ -132,14 +130,14 @@ export async function adminRoutes(app: FastifyInstance) {
        body.title ?? null, body.artist ?? null, body.description ?? null],
     );
 
-    // Upsert zones
+    // Replace zones entirely — delete assignments first (FK has no CASCADE),
+    // then zones. This clears stale contributions linked to previous zone IDs.
+    await db.query(`DELETE FROM zone_assignments WHERE artwork_id = $1`, [id]);
+    await db.query(`DELETE FROM zones WHERE artwork_id = $1`, [id]);
     for (const z of body.zones) {
       await db.query(
         `INSERT INTO zones (id, artwork_id, pigment, cell_count, target_hex)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (id, artwork_id) DO UPDATE SET
-           pigment = EXCLUDED.pigment, cell_count = EXCLUDED.cell_count,
-           target_hex = EXCLUDED.target_hex`,
+         VALUES ($1, $2, $3, $4, $5)`,
         [z.id, id, z.pigment, z.cellCount, z.targetHex],
       );
     }

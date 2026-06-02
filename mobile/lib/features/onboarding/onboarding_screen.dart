@@ -67,15 +67,23 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final pseudo = _pseudoCtrl.text.trim();
     if (pseudo.isEmpty) return;
     final name   = _nameCtrl.text.trim();
-    switch (_tab.index) {
-      case 0: // Rejoindre
-        if (!_canJoin) return;
-        widget.onJoin(_code, pseudo, name.isEmpty ? _code : name);
-      case 1: // Créer
-        widget.onJoin(null, pseudo, name);
-      case 2: // Solo
-        final json = _artworkCtrl.text.trim();
-        widget.onSolo(pseudo, json.isEmpty ? null : json);
+    // Tabs: 0=Solo, 1=Rejoindre, 2=Créer (when hasSolo: 0=Rejoindre, 1=Créer)
+    if (widget.hasSolo) {
+      switch (_tab.index) {
+        case 0: if (!_canJoin) return; widget.onJoin(_code, pseudo, name.isEmpty ? _code : name);
+        case 1: widget.onJoin(null, pseudo, name);
+      }
+    } else {
+      switch (_tab.index) {
+        case 0: // Solo
+          final json = _artworkCtrl.text.trim();
+          widget.onSolo(pseudo, json.isEmpty ? null : json);
+        case 1: // Rejoindre
+          if (!_canJoin) return;
+          widget.onJoin(_code, pseudo, name.isEmpty ? _code : name);
+        case 2: // Créer
+          widget.onJoin(null, pseudo, name);
+      }
     }
   }
 
@@ -186,56 +194,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                   dividerColor: Colors.transparent,
                   tabs: [
+                    if (!widget.hasSolo) const Tab(text: 'Solo'),
                     const Tab(text: 'Rejoindre'),
                     const Tab(text: 'Créer'),
-                    if (!widget.hasSolo) const Tab(text: 'Solo'),
                   ],
                 ),
               ),
 
-              // ── Join panel ─────────────────────────────────────
-              if (_tab.index == 0) ...[
-                const SizedBox(height: 22),
-                Align(alignment: Alignment.centerLeft, child: MdaOverline('Code d\'instance')),
-                const SizedBox(height: 10),
-                _SplitCodeInput(
-                  length: _codeLength,
-                  value: _code,
-                  onChanged: (v) => setState(() => _code = v),
-                  accent: accent, surface: surface, line: line, fg1: fg1, fg3: fg3,
-                ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Demande le code à la personne qui a créé l\'instance.',
-                    style: MdaType.caption(color: fg3),
-                  ),
-                ),
-              ],
-
-              // ── Create panel ───────────────────────────────────
-              if (_tab.index == 1) ...[
-                const SizedBox(height: 22),
-                Align(alignment: Alignment.centerLeft,
-                    child: MdaOverline('Nom de l\'instance · facultatif')),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _nameCtrl,
-                  style: MdaType.body(color: fg1),
-                  decoration: InputDecoration(
-                    hintText: 'Les copains de fac',
-                    hintStyle: MdaType.body(color: fg3)),
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-                const SizedBox(height: 8),
-                Text('Un code à partager sera généré automatiquement.',
-                    style: MdaType.caption(color: fg3)),
-              ],
+              // Tabs: Solo=0, Rejoindre=1, Créer=2  (hasSolo: Rejoindre=0, Créer=1)
 
               // ── Solo panel ─────────────────────────────────────
-              if (!widget.hasSolo && _tab.index == 2) ...[
-                const SizedBox(height: 22),
+              if (!widget.hasSolo && _tab.index == 0) ...[
+                const SizedBox(height: 14),
+                _ModeChip(label: 'Local — sans connexion', icon: Icons.smartphone_rounded,
+                    color: MdaColors.clay400),
+                const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -245,18 +218,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.person_outline_rounded, size: 20, color: accent),
+                      Icon(Icons.person_outline_rounded, size: 20, color: MdaColors.clay400),
                       const SizedBox(width: 10),
                       Expanded(child: Text(
-                        'Mode solo — aucun serveur requis. '
-                        'Tu joues seul(e) : une couleur par jour, les photos sont stockées sur ton téléphone.',
+                        'Joue seul(e) sans serveur. Tes photos sont stockées sur ton téléphone. '
+                        'Idéal pour essayer l\'app ou jouer hors connexion.',
                         style: MdaType.caption(color: fg2),
                       )),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Optional artwork import
                 GestureDetector(
                   onTap: () => setState(() => _showArtwork = !_showArtwork),
                   child: Row(
@@ -289,6 +261,52 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     style: MdaType.caption(color: fg3),
                   ),
                 ],
+              ],
+
+              // ── Join panel ─────────────────────────────────────
+              if (_tab.index == (widget.hasSolo ? 0 : 1)) ...[
+                const SizedBox(height: 14),
+                _ModeChip(label: 'En ligne — serveur requis', icon: Icons.cloud_outlined,
+                    color: MdaColors.pigCobalt),
+                const SizedBox(height: 14),
+                Align(alignment: Alignment.centerLeft, child: MdaOverline('Code d\'instance')),
+                const SizedBox(height: 10),
+                _SplitCodeInput(
+                  length: _codeLength,
+                  value: _code,
+                  onChanged: (v) => setState(() => _code = v),
+                  accent: accent, surface: surface, line: line, fg1: fg1, fg3: fg3,
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Demande le code à la personne qui a créé l\'instance.',
+                    style: MdaType.caption(color: fg3),
+                  ),
+                ),
+              ],
+
+              // ── Create panel ───────────────────────────────────
+              if (_tab.index == (widget.hasSolo ? 1 : 2)) ...[
+                const SizedBox(height: 14),
+                _ModeChip(label: 'En ligne — serveur requis', icon: Icons.cloud_outlined,
+                    color: MdaColors.pigCobalt),
+                const SizedBox(height: 14),
+                Align(alignment: Alignment.centerLeft,
+                    child: MdaOverline('Nom de l\'instance · facultatif')),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _nameCtrl,
+                  style: MdaType.body(color: fg1),
+                  decoration: InputDecoration(
+                    hintText: 'Les copains de fac',
+                    hintStyle: MdaType.body(color: fg3)),
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 8),
+                Text('Un code à partager sera généré automatiquement.',
+                    style: MdaType.caption(color: fg3)),
               ],
 
               // ── Pseudo (obligatoire) ────────────────────────────
@@ -334,28 +352,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
               // ── CTA ────────────────────────────────────────────
               const SizedBox(height: 28),
+              // Solo=0, Rejoindre=1, Créer=2  (hasSolo: Rejoindre=0, Créer=1)
               MdaButton(
-                label: switch (_tab.index) {
-                  0 => 'Rejoindre l\'instance',
-                  1 => 'Créer une instance',
-                  _ => 'Jouer en solo',
-                },
+                label: (!widget.hasSolo && _tab.index == 0)
+                    ? 'Jouer en solo'
+                    : _tab.index == (widget.hasSolo ? 0 : 1)
+                        ? 'Rejoindre l\'instance'
+                        : 'Créer une instance',
                 expand: true,
-                onPressed: switch (_tab.index) {
-                  0 => _canJoin   ? _submit : null,
-                  1 => _canCreate ? _submit : null,
-                  _ => _canSolo   ? _submit : null,
-                },
+                onPressed: (!widget.hasSolo && _tab.index == 0)
+                    ? (_canSolo ? _submit : null)
+                    : _tab.index == (widget.hasSolo ? 0 : 1)
+                        ? (_canJoin ? _submit : null)
+                        : (_canCreate ? _submit : null),
               ),
-              // Reminder when solo is already taken
-              if (widget.hasSolo) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'Une instance solo existe déjà — elle ne peut être créée qu\'une seule fois.',
-                  style: MdaType.caption(color: fg3),
-                  textAlign: TextAlign.center,
-                ),
-              ],
             ],
           ),
         ),
@@ -490,5 +500,43 @@ extension on double {
     double r = x / 2;
     for (int i = 0; i < 20; i++) r = (r + x / r) / 2;
     return r;
+  }
+}
+
+// ── Mode indicator chip ───────────────────────────────────────────────────────
+
+class _ModeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  const _ModeChip({required this.label, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withAlpha(0x1A),
+          borderRadius: MdaRadius.bPill,
+          border: Border.all(color: color.withAlpha(0x40)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 5),
+            Text(label,
+              style: TextStyle(
+                fontFamily: MdaFonts.sans,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              )),
+          ],
+        ),
+      ),
+    );
   }
 }

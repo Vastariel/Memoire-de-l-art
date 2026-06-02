@@ -36,12 +36,16 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
+enum _TestState { idle, loading, ok, error }
+
 class _SettingsScreenState extends State<SettingsScreen> {
-  TimeOfDay _notifTime = const TimeOfDay(hour: 8, minute: 30);
-  bool _notifEnabled  = true;
-  bool _showAdvanced  = false;
-  final _serverCtrl   = TextEditingController();
-  bool _loading       = true;
+  TimeOfDay _notifTime  = const TimeOfDay(hour: 8, minute: 30);
+  bool _notifEnabled    = true;
+  bool _showAdvanced    = false;
+  final _serverCtrl     = TextEditingController();
+  bool _loading         = true;
+  _TestState _testState = _TestState.idle;
+  String _testMessage   = '';
 
   @override
   void initState() {
@@ -69,19 +73,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveServerUrl(String url) async {
-    final prefs = await SharedPreferences.getInstance();
     final trimmed = url.trim();
+    setState(() { _testState = _TestState.loading; _testMessage = ''; });
+
+    final prefs = await SharedPreferences.getInstance();
     if (trimmed.isEmpty) {
       await prefs.remove('custom_server_url');
-    } else {
-      await prefs.setString('custom_server_url', trimmed);
+      ApiClient.reset();
+      if (!mounted) return;
+      setState(() { _testState = _TestState.idle; _testMessage = 'Serveur par défaut restauré.'; });
+      return;
     }
+
+    await prefs.setString('custom_server_url', trimmed);
     ApiClient.reset();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Serveur mis à jour — reconnecte-toi.')),
-      );
-    }
+
+    final ok = await ApiClient.testConnection(trimmed);
+    if (!mounted) return;
+    setState(() {
+      _testState   = ok ? _TestState.ok : _TestState.error;
+      _testMessage = ok ? 'Serveur joignable ✓' : 'Serveur inaccessible ou incompatible ✗';
+    });
   }
 
   Future<void> _pickTime() async {
@@ -328,10 +340,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       Expanded(
                                         child: TextField(
                                           controller: _serverCtrl,
-                                          style: MdaType.body(color: fg1).copyWith(fontSize: 15),
+                                          style: MdaType.body(color: fg1).copyWith(fontSize: 14),
                                           decoration: InputDecoration(
-                                            hintText: 'http://192.168.x.x:3000',
-                                            hintStyle: MdaType.body(color: fg3),
+                                            hintText: 'Laisser vide pour le serveur par défaut',
+                                            hintStyle: MdaType.body(color: fg3).copyWith(fontSize: 13),
                                           ),
                                           keyboardType: TextInputType.url,
                                           onSubmitted: _saveServerUrl,
@@ -339,25 +351,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                       const SizedBox(width: 8),
                                       GestureDetector(
-                                        onTap: () => _saveServerUrl(_serverCtrl.text),
+                                        onTap: _testState == _TestState.loading
+                                            ? null
+                                            : () => _saveServerUrl(_serverCtrl.text),
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                           decoration: BoxDecoration(
                                             color: isDark ? MdaDark.accent : MdaLight.accent,
                                             borderRadius: MdaRadius.bSm,
                                           ),
-                                          child: Text('OK',
-                                            style: TextStyle(color: Colors.white,
-                                              fontFamily: MdaFonts.sans, fontWeight: FontWeight.w600)),
+                                          child: _testState == _TestState.loading
+                                              ? const SizedBox(width: 18, height: 18,
+                                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                              : Text('OK',
+                                                  style: TextStyle(color: Colors.white,
+                                                    fontFamily: MdaFonts.sans, fontWeight: FontWeight.w600)),
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Adresse IP de ton serveur Unraid. Laisse vide pour le serveur public.',
-                                    style: MdaType.caption(color: fg3),
-                                  ),
+                                  if (_testMessage.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          _testState == _TestState.ok
+                                              ? Icons.check_circle_outline_rounded
+                                              : _testState == _TestState.error
+                                                  ? Icons.error_outline_rounded
+                                                  : Icons.info_outline_rounded,
+                                          size: 14,
+                                          color: _testState == _TestState.ok
+                                              ? MdaColors.ok
+                                              : _testState == _TestState.error
+                                                  ? MdaColors.error
+                                                  : fg3,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(_testMessage,
+                                          style: MdaType.caption(
+                                            color: _testState == _TestState.ok
+                                                ? MdaColors.ok
+                                                : _testState == _TestState.error
+                                                    ? MdaColors.error
+                                                    : fg3)),
+                                      ],
+                                    ),
+                                  ] else ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Laisse vide pour utiliser mda.vastariel.fr.',
+                                      style: MdaType.caption(color: fg3),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
