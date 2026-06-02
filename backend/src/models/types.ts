@@ -55,7 +55,7 @@ export interface Player {
   id: string;
   instanceId: string;
   pseudo?: string;
-  avatarPigment: PigmentKey;
+  avatarPigment: string;
   fcmToken?: string;          // for push notifications
   notifHour: number;          // 0–23
   notifMinute: number;        // 0 | 15 | 30 | 45

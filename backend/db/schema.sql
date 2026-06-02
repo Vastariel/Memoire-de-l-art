@@ -95,6 +95,18 @@ CREATE TABLE IF NOT EXISTS artwork_hints (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ── Instance name column ─────────────────────────────────────────────────────
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'instances' AND column_name = 'name'
+  ) THEN
+    ALTER TABLE instances ADD COLUMN name TEXT;
+  END IF;
+END;
+$$;
+
 -- ── HD URL column ─────────────────────────────────────────────────────────────
 -- Added via ALTER if the artworks table already exists without it.
 -- schema.sql runs idempotently so we use IF NOT EXISTS pattern via DO block.

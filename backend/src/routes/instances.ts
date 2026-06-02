@@ -16,6 +16,7 @@ const joinSchema = z.object({
 
 const createSchema = z.object({
   pseudo:   z.string().max(32).optional(),
+  name:     z.string().max(64).optional(),
   fcmToken: z.string().optional(),
 });
 
@@ -38,9 +39,9 @@ export async function instanceRoutes(app: FastifyInstance) {
 
     const now = new Date();
     const inst = await db.query<{ id: string }>(
-      `INSERT INTO instances (code, artwork_id, year_, month_)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [code, artwork.id, now.getFullYear(), now.getMonth() + 1],
+      `INSERT INTO instances (code, name, artwork_id, year_, month_)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [code, body.name ?? null, artwork.id, now.getFullYear(), now.getMonth() + 1],
     );
     const instanceId = inst.rows[0]!.id;
 
