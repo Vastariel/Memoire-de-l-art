@@ -1,71 +1,55 @@
-// Core domain types shared by routes and services
+// types.ts — v2 domain types.
 
-export interface Zone {
-  id:        string;
-  artworkId: string;
-  pigment:   string;   // zone slug (e.g. "zone-03")
-  label:     string;   // evocative French name
-  cellCount: number;
-  targetHex: string;   // k-means centroid hex
+export type AuthProvider = 'google' | 'apple' | 'dev';
+export type InstanceMode = 'shared' | 'separate';
+export type ArtworkStatus = 'draft' | 'planned' | 'active' | 'revealed';
+
+// JWT payload (cross-instance user). The backend keeps its own JWT.
+export interface JwtPayload {
+  userId: string;
 }
 
-export interface ZoneAssignment {
+export interface AppUser {
   id: string;
-  zoneId: string;
-  instanceId: string;
-  playerId: string;
-  assignedDate: string;
-  submittedAt?: string;
-  photoUrl?: string;
-  colorDelta?: number;
-  blendMode?: 'replace' | 'rejected';
+  provider: AuthProvider;
+  providerSub: string;
+  email: string | null;
+  pseudo: string | null;
+  avatarPigment: string;
+  locale: string;
+  notifHour: number;
+  notifMinute: number;
+  consentRgpd: boolean;
 }
 
-export interface Artwork {
-  id: string;
-  cols: number;
-  rows: number;
-  cells: MosaicCell[];
-  // Revealed only at month end
-  title?: string;
-  artist?: string;
-  year?: number;
-  description?: string;
-  thumbnailUrl?: string;
-  publishedAt?: string;
-}
-
-export interface MosaicCell {
-  index: number;
+export interface ArtworkCell {
+  i: number;
   col: number;
   row: number;
-  zoneId: string;
+  family: string;
+  variant: string;
 }
 
-export interface Instance {
-  id: string;
-  code: string;               // 6-char alphanumeric
-  artworkId: string;
-  year: number;
-  month: number;              // 1–12
-  createdAt: string;
+export interface FamilyDef {
+  key: string;
+  day: number;
+  nameFr: string;
+  nameEn: string;
 }
 
-export interface Player {
-  id: string;
-  instanceId: string;
-  pseudo?: string;
-  avatarPigment: string;
-  fcmToken?: string;          // for push notifications
-  notifHour: number;          // 0–23
-  notifMinute: number;        // 0 | 15 | 30 | 45
-  customServerUrl?: string;
-  createdAt: string;
-  deletedAt?: string;         // GDPR soft-delete
+export interface VariantDef {
+  key: string;
+  familyKey: string;
+  nameFr: string;
+  nameEn: string;
+  hex: string;
 }
 
+// Result of analysing a submitted photo. Matching is laxiste: never rejected.
 export interface ColorMatchResult {
-  delta:   number;
-  mode:    'replace' | 'rejected';
-  verdict: 'parfait' | 'correct' | 'rejeté';
+  dominantHex: string;
+  deltaE: number;       // distance to the target variant hue (lower = better)
+  variance: number;     // image richness 0..1 (low = flat aplat)
+  verdict: 'parfait' | 'correct' | 'libre'; // 'libre' = accepted, gentle feedback
+  matchBonus: number;   // 0..15 points
 }

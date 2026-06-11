@@ -22,6 +22,12 @@ services:
       COLOR_DELTA_PERFECT: 25
       COLOR_DELTA_ACCEPT:  55
       NODE_ENV:            production
+      # Set ALLOW_DEV_LOGIN=true to allow POST /auth/dev before Firebase is set up.
+      ALLOW_DEV_LOGIN:     ${ALLOW_DEV_LOGIN:-false}
+      # OAuth (Google/Apple via Firebase) — optional until you wire real sign-in.
+      FIREBASE_PROJECT_ID:   ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY:  ${FIREBASE_PRIVATE_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -48,8 +54,10 @@ services:
       POSTGRES_DB:       mda
     volumes:
       - pg_data:/var/lib/postgresql/data
-      # Schema applied automatically on first start
+      # Applied automatically on a FRESH database (alphabetical order); also
+      # available inside the db container for manual re-runs via the console.
       - /mnt/user/memoire-de-lart/backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - /mnt/user/memoire-de-lart/backend/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mda"]
       interval: 5s

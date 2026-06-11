@@ -33,6 +33,9 @@ const schema = z.object({
 
   // Admin panel authentication
   ADMIN_TOKEN: z.string().optional(),
+
+  // Allow POST /auth/dev (no real OAuth) — handy before Firebase is set up.
+  ALLOW_DEV_LOGIN: z.coerce.boolean().default(false),
 });
 
 const parsed = schema.safeParse(process.env);

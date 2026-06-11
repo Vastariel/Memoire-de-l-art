@@ -1,203 +1,134 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { db }              from '../services/db';
-import { segmentArtwork }  from '../services/segmentation';
-import { env }             from '../config/env';
+// admin.ts — v2 admin API (Bearer ADMIN_TOKEN). Minimal but functional;
+// the rich interactive pixelisation/crop UI is Phase 3.
 
-// ── Admin auth ────────────────────────────────────────────────────────────────
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { db } from '../services/db';
+import { storage } from '../services/storage';
+import { env } from '../config/env';
+import { isoWeek } from '../services/cycle';
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
-  const auth  = req.headers.authorization ?? '';
+  const auth = req.headers.authorization ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
     return reply.code(401).send({ error: 'Admin token requis.' });
   }
 }
 
+const artworkSchema = z.object({
+  id: z.string(),
+  titleFr: z.string().optional(),
+  titleEn: z.string().optional(),
+  artist: z.string().optional(),
+  year: z.number().int().optional(),
+  descriptionFr: z.string().optional(),
+  descriptionEn: z.string().optional(),
+  sourceLicense: z.string().optional(),
+  cols: z.number().int().default(12),
+  rows: z.number().int().default(16),
+  hdUrl: z.string().optional(),
+  status: z.enum(['draft', 'planned', 'active', 'revealed']).default('planned'),
+  isoYear: z.number().int(),
+  isoWeek: z.number().int(),
+  cells: z.array(z.object({ i: z.number(), col: z.number(), row: z.number(), family: z.string(), variant: z.string() })),
+  families: z.array(z.object({ key: z.string(), day: z.number().int(), nameFr: z.string(), nameEn: z.string() })),
+  variants: z.array(z.object({ key: z.string(), familyKey: z.string(), nameFr: z.string(), nameEn: z.string(), hex: z.string() })),
+});
+
 export async function adminRoutes(app: FastifyInstance) {
-
-  // ── Dashboard stats ───────────────────────────────────────────
-
   app.get('/stats', { onRequest: [requireAdmin] }, async (_req, reply) => {
-    const now = new Date();
-    const [instances, players, photos, zones] = await Promise.all([
-      db.query<{ count: string }>(`SELECT COUNT(*) FROM instances WHERE year_ = $1 AND month_ = $2`,
-        [now.getFullYear(), now.getMonth() + 1]),
-      db.query<{ count: string }>(`SELECT COUNT(*) FROM players WHERE deleted_at IS NULL`),
-      db.query<{ count: string }>(`SELECT COUNT(*) FROM zone_assignments WHERE submitted_at::date = CURRENT_DATE`),
-      db.query<{ total: string; filled: string }>(
-        `SELECT COUNT(*) as total,
-                SUM(CASE WHEN za.submitted_at IS NOT NULL THEN 1 ELSE 0 END) as filled
-         FROM zones z
-         LEFT JOIN zone_assignments za ON za.zone_id = z.id AND za.artwork_id = z.artwork_id
-           AND za.submitted_at IS NOT NULL
-         WHERE z.artwork_id IN (
-           SELECT id FROM artworks WHERE published_at IS NOT NULL
-             AND EXTRACT(YEAR FROM published_at) = $1
-             AND EXTRACT(MONTH FROM published_at) = $2
-         )`,
-        [now.getFullYear(), now.getMonth() + 1]),
+    const { year, week } = isoWeek();
+    const [instances, users, photos, weeks] = await Promise.all([
+      db.query<{ n: string }>(`SELECT COUNT(*) AS n FROM instances`),
+      db.query<{ n: string }>(`SELECT COUNT(*) AS n FROM app_users WHERE deleted_at IS NULL`),
+      db.query<{ n: string }>(`SELECT COUNT(*) AS n FROM photos WHERE taken_on = CURRENT_DATE AND deleted_at IS NULL`),
+      db.query<{ n: string }>(`SELECT COUNT(*) AS n FROM artworks WHERE status <> 'draft'`),
     ]);
     return reply.send({
-      instances:    parseInt(instances.rows[0]?.count ?? '0'),
-      players:      parseInt(players.rows[0]?.count   ?? '0'),
-      photosToday:  parseInt(photos.rows[0]?.count    ?? '0'),
-      zonesTotal:   parseInt(zones.rows[0]?.total     ?? '0'),
-      zonesFilled:  parseInt(zones.rows[0]?.filled    ?? '0'),
+      instances: parseInt(instances.rows[0]?.n ?? '0'),
+      users: parseInt(users.rows[0]?.n ?? '0'),
+      photosToday: parseInt(photos.rows[0]?.n ?? '0'),
+      weeksPlanned: parseInt(weeks.rows[0]?.n ?? '0'),
+      currentIsoWeek: `${year}-W${week}`,
     });
   });
 
-  // ── Instances list ────────────────────────────────────────────
-
-  app.get('/instances', { onRequest: [requireAdmin] }, async (_req, reply) => {
-    const rows = await db.query(
-      `SELECT i.id, i.code, i.name, i.year_, i.month_,
-              COUNT(DISTINCT p.id)  AS players,
-              COUNT(DISTINCT za.id) FILTER (WHERE za.assigned_date = CURRENT_DATE) AS today_count,
-              COUNT(DISTINCT za2.id) FILTER (WHERE za2.submitted_at IS NOT NULL) AS filled
-       FROM instances i
-       LEFT JOIN players p   ON p.instance_id = i.id AND p.deleted_at IS NULL
-       LEFT JOIN zone_assignments za  ON za.instance_id = i.id AND za.assigned_date = CURRENT_DATE
-       LEFT JOIN zone_assignments za2 ON za2.instance_id = i.id AND za2.submitted_at IS NOT NULL
-       GROUP BY i.id
-       ORDER BY i.created_at DESC`,
-    );
-    return reply.send({ instances: rows.rows });
-  });
-
-  // ── Artworks list ─────────────────────────────────────────────
-
   app.get('/artworks', { onRequest: [requireAdmin] }, async (_req, reply) => {
     const rows = await db.query(
-      `SELECT id, title, artist, published_at, created_at,
-              (SELECT COUNT(*) FROM zones WHERE artwork_id = artworks.id) AS zone_count
-       FROM artworks ORDER BY created_at DESC`);
+      `SELECT id, title_fr, artist, year_, status, iso_year, iso_week, created_at
+       FROM artworks ORDER BY iso_year DESC NULLS LAST, iso_week DESC NULLS LAST, created_at DESC`,
+    );
     return reply.send({ artworks: rows.rows });
   });
 
-  // ── Segment artwork image ─────────────────────────────────────
-  // POST /api/admin/artworks/segment
-  // Multipart: file (image) + blockSize + maxZones
-
-  app.post('/artworks/segment', { onRequest: [requireAdmin] }, async (req, reply) => {
-    let fileBuffer: Buffer | null = null;
-    let numZones   = 16;
-
-    const parts = req.parts();
-    for await (const part of parts) {
-      if (part.type === 'field') {
-        if (part.fieldname === 'numZones') numZones = Math.min(120, Math.max(8, parseInt(part.value as string) || 16));
-      } else if (part.type === 'file') {
-        const chunks: Buffer[] = [];
-        for await (const chunk of part.file) chunks.push(chunk);
-        fileBuffer = Buffer.concat(chunks);
-      }
-    }
-
-    if (!fileBuffer) return reply.code(400).send({ error: 'Image manquante.' });
-
-    const result = await segmentArtwork(fileBuffer, numZones);
-    return reply.send(result);
-  });
-
-  // ── Publish artwork ───────────────────────────────────────────
-  // POST /api/admin/artworks/publish
-
-  app.post('/artworks/publish', { onRequest: [requireAdmin] }, async (req, reply) => {
-    const body = req.body as {
-      id?:          string;
-      cols:         number;
-      rows:         number;
-      cells:        unknown[];
-      zones:        Array<{ id: string; pigment: string; cellCount: number; targetHex: string }>;
-      title?:       string;
-      artist?:      string;
-      year?:        number;
-      description?: string;
-    };
-
-    const now  = new Date();
-    const id   = body.id ?? `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    // Upsert artwork
+  // Create or replace an artwork with its families, variants and cell map.
+  app.post('/artworks', { onRequest: [requireAdmin] }, async (req, reply) => {
+    const b = artworkSchema.parse(req.body);
     await db.query(
-      `INSERT INTO artworks (id, cols, rows, cells, title, artist, description, published_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      `INSERT INTO artworks (id, title_fr, title_en, artist, year_, description_fr, description_en,
+                             source_license, cols, rows, cells, hd_url, status, iso_year, iso_week)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15)
        ON CONFLICT (id) DO UPDATE SET
-         cols = EXCLUDED.cols, rows = EXCLUDED.rows, cells = EXCLUDED.cells,
-         title = EXCLUDED.title, artist = EXCLUDED.artist,
-         description = EXCLUDED.description, published_at = NOW()`,
-      [id, body.cols, body.rows, JSON.stringify(body.cells),
-       body.title ?? null, body.artist ?? null, body.description ?? null],
+         title_fr=$2, title_en=$3, artist=$4, year_=$5, description_fr=$6, description_en=$7,
+         source_license=$8, cols=$9, rows=$10, cells=$11::jsonb, hd_url=$12, status=$13,
+         iso_year=$14, iso_week=$15`,
+      [b.id, b.titleFr ?? null, b.titleEn ?? null, b.artist ?? null, b.year ?? null,
+        b.descriptionFr ?? null, b.descriptionEn ?? null, b.sourceLicense ?? null,
+        b.cols, b.rows, JSON.stringify(b.cells), b.hdUrl ?? null, b.status, b.isoYear, b.isoWeek],
     );
-
-    // Replace zones entirely — delete assignments first (FK has no CASCADE),
-    // then zones. This clears stale contributions linked to previous zone IDs.
-    await db.query(`DELETE FROM zone_assignments WHERE artwork_id = $1`, [id]);
-    await db.query(`DELETE FROM zones WHERE artwork_id = $1`, [id]);
-    for (const z of body.zones) {
+    await db.query(`DELETE FROM color_families WHERE artwork_id = $1`, [b.id]);
+    for (const f of b.families) {
       await db.query(
-        `INSERT INTO zones (id, artwork_id, pigment, cell_count, target_hex)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [z.id, id, z.pigment, z.cellCount, z.targetHex],
+        `INSERT INTO color_families (artwork_id, key, day_, name_fr, name_en) VALUES ($1,$2,$3,$4,$5)`,
+        [b.id, f.key, f.day, f.nameFr, f.nameEn],
       );
     }
-
-    return reply.code(201).send({ id, zonesCreated: body.zones.length });
+    for (const v of b.variants) {
+      await db.query(
+        `INSERT INTO color_variants (artwork_id, key, family_key, name_fr, name_en, hex)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [b.id, v.key, v.familyKey, v.nameFr, v.nameEn, v.hex],
+      );
+    }
+    return reply.code(201).send({ ok: true, id: b.id });
   });
 
-  // ── Delete artwork ────────────────────────────────────────────
+  app.post('/artworks/:id/status', { onRequest: [requireAdmin] }, async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const status = z.enum(['draft', 'planned', 'active', 'revealed']).parse((req.body as { status: string }).status);
+    await db.query(`UPDATE artworks SET status = $2 WHERE id = $1`, [id, status]);
+    return reply.send({ ok: true, id, status });
+  });
 
   app.delete('/artworks/:id', { onRequest: [requireAdmin] }, async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const id = (req.params as { id: string }).id;
     await db.query(`DELETE FROM artworks WHERE id = $1`, [id]);
     return reply.code(204).send();
   });
 
-  // ── Hints CRUD ────────────────────────────────────────────────
-
-  // GET /api/admin/artworks/:id/hints
-  app.get('/artworks/:id/hints', { onRequest: [requireAdmin] }, async (req, reply) => {
-    const { id } = req.params as { id: string };
+  // Photo gallery / moderation.
+  app.get('/gallery', { onRequest: [requireAdmin] }, async (req, reply) => {
+    const q = req.query as { instanceId?: string; userId?: string };
     const rows = await db.query(
-      `SELECT id, text, is_active, created_at
-       FROM artwork_hints WHERE artwork_id = $1
-       ORDER BY created_at DESC`,
-      [id],
+      `SELECT p.id, p.url, p.taken_on, p.day_, p.target_variant_key, p.delta_e, u.pseudo
+       FROM photos p JOIN app_users u ON u.id = p.user_id
+       WHERE p.deleted_at IS NULL
+         AND ($1::uuid IS NULL OR p.user_id = $1)
+         AND ($2::uuid IS NULL OR p.separate_instance_id = $2
+              OR EXISTS (SELECT 1 FROM contributions c WHERE c.photo_id = p.id AND c.instance_id = $2))
+       ORDER BY p.created_at DESC LIMIT 200`,
+      [q.userId ?? null, q.instanceId ?? null],
     );
-    return reply.send({ hints: rows.rows });
+    return reply.send({ photos: rows.rows });
   });
 
-  // POST /api/admin/artworks/:id/hints
-  app.post('/artworks/:id/hints', { onRequest: [requireAdmin] }, async (req, reply) => {
-    const { id }   = req.params as { id: string };
-    const { text, isActive } = req.body as { text: string; isActive?: boolean };
-    if (!text?.trim()) return reply.code(400).send({ error: 'Texte requis.' });
-    const res = await db.query<{ id: string }>(
-      `INSERT INTO artwork_hints (artwork_id, text, is_active) VALUES ($1, $2, $3) RETURNING id`,
-      [id, text.trim(), isActive ?? false],
-    );
-    return reply.code(201).send({ id: res.rows[0]!.id });
-  });
-
-  // PATCH /api/admin/hints/:hintId — toggle active / update text
-  app.patch('/hints/:hintId', { onRequest: [requireAdmin] }, async (req, reply) => {
-    const { hintId } = req.params as { hintId: string };
-    const { text, isActive } = req.body as { text?: string; isActive?: boolean };
-    const sets: string[] = [];
-    const vals: unknown[] = [];
-    let n = 1;
-    if (text     !== undefined) { sets.push(`text = $${n++}`);      vals.push(text); }
-    if (isActive !== undefined) { sets.push(`is_active = $${n++}`); vals.push(isActive); }
-    if (!sets.length) return reply.code(400).send({ error: 'Aucun champ à mettre à jour.' });
-    vals.push(hintId);
-    await db.query(`UPDATE artwork_hints SET ${sets.join(', ')} WHERE id = $${n}`, vals);
-    return reply.send({ updated: true });
-  });
-
-  // DELETE /api/admin/hints/:hintId
-  app.delete('/hints/:hintId', { onRequest: [requireAdmin] }, async (req, reply) => {
-    const { hintId } = req.params as { hintId: string };
-    await db.query(`DELETE FROM artwork_hints WHERE id = $1`, [hintId]);
+  // Delete a photo (removes contributions → cells revert to flat colour).
+  app.delete('/photos/:id', { onRequest: [requireAdmin] }, async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const row = await db.query<{ storage_key: string }>(`SELECT storage_key FROM photos WHERE id = $1`, [id]);
+    if (row.rows[0]) await storage.deletePhoto(row.rows[0].storage_key);
+    await db.query(`DELETE FROM photos WHERE id = $1`, [id]);
     return reply.code(204).send();
   });
 }

@@ -1,218 +1,159 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+// instances.ts — create / join / mine / artwork state / leaderboard.
+
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../services/db';
-import {
-  assignTodayZone,
-  buildZoneState,
-  generateCode,
-  randomPigment,
-} from '../services/zones';
+import { currentArtwork, isoWeek } from '../services/cycle';
+import type { JwtPayload } from '../models/types';
 
-const joinSchema = z.object({
-  code:       z.string().min(4).max(8).transform(s => s.toUpperCase()),
-  pseudo:     z.string().max(32).optional(),
-  fcmToken:   z.string().optional(),
-});
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function genCode(len = 6): string {
+  let s = '';
+  for (let i = 0; i < len; i++) s += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  return s;
+}
 
 const createSchema = z.object({
-  pseudo:   z.string().max(32).optional(),
-  name:     z.string().max(64).optional(),
-  fcmToken: z.string().optional(),
+  name: z.string().max(64).optional(),
+  mode: z.enum(['shared', 'separate']).default('shared'),
+  solo: z.boolean().default(false),
 });
+const joinSchema = z.object({ code: z.string().min(4).max(8).transform(s => s.toUpperCase()) });
 
 export async function instanceRoutes(app: FastifyInstance) {
+  // Create an instance and join it.
+  app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { userId } = req.user as JwtPayload;
+    const body = createSchema.parse(req.body ?? {});
 
-  // POST /api/v1/instances  — create a new group for the current month
-  app.post('/', async (req, reply) => {
-    const body = createSchema.parse(req.body);
-
-    const artwork = await currentMonthArtwork();
-    if (!artwork) return reply.code(503).send({ error: 'Pas d\'œuvre publiée ce mois-ci.' });
-
-    // Generate unique code (retry on collision)
     let code = '';
     for (let i = 0; i < 10; i++) {
-      code = generateCode();
+      code = genCode();
       const dup = await db.query('SELECT 1 FROM instances WHERE code = $1', [code]);
       if (dup.rows.length === 0) break;
     }
-
-    const now = new Date();
     const inst = await db.query<{ id: string }>(
-      `INSERT INTO instances (code, name, artwork_id, year_, month_)
+      `INSERT INTO instances (code, name, mode, solo, owner_user_id)
        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [code, body.name ?? null, artwork.id, now.getFullYear(), now.getMonth() + 1],
+      [code, body.name ?? null, body.mode, body.solo, userId],
     );
-    const instanceId = inst.rows[0]!.id;
-
-    const { player, token } = await createPlayer(instanceId, artwork.id, body.pseudo, body.fcmToken, app);
-
+    const id = inst.rows[0]!.id;
+    await db.query(`INSERT INTO instance_members (instance_id, user_id) VALUES ($1, $2)`, [id, userId]);
     return reply.code(201).send({
-      token,
-      instance: await instancePayload(instanceId, artwork.id, player.id),
+      instance: { id, code, name: body.name ?? null, mode: body.mode, solo: body.solo, members: 1, place: 1 },
     });
   });
 
-  // POST /api/v1/instances/join  — join an existing group by code
-  app.post('/join', async (req, reply) => {
-    const body = joinSchema.parse(req.body);
-
-    const inst = await db.query<{ id: string; artwork_id: string }>(
-      `SELECT id, artwork_id FROM instances WHERE code = $1`,
-      [body.code],
+  // Join an instance by code; import this week's shared photos as contributions.
+  app.post('/join', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { userId } = req.user as JwtPayload;
+    const { code } = joinSchema.parse(req.body);
+    const inst = await db.query<{ id: string; name: string | null; mode: string; solo: boolean }>(
+      `SELECT id, name, mode, solo FROM instances WHERE code = $1`, [code],
     );
     if (inst.rows.length === 0) return reply.code(404).send({ error: 'Instance introuvable.' });
-
-    const { id: instanceId, artwork_id: artworkId } = inst.rows[0]!;
-    const { player, token } = await createPlayer(instanceId, artworkId, body.pseudo, body.fcmToken, app);
-
-    return reply.code(201).send({
-      token,
-      instance: await instancePayload(instanceId, artworkId, player.id),
+    const it = inst.rows[0]!;
+    await db.query(
+      `INSERT INTO instance_members (instance_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [it.id, userId],
+    );
+    await importSharedPhotos(userId, it.id, it.mode);
+    const members = await db.query<{ n: string }>(
+      `SELECT COUNT(*) AS n FROM instance_members WHERE instance_id = $1`, [it.id],
+    );
+    return reply.send({
+      instance: { id: it.id, code, name: it.name, mode: it.mode, solo: it.solo, members: parseInt(members.rows[0]!.n), place: 1 },
     });
   });
 
-  // GET /api/v1/instances/me  — current player's instance state (poll for updates)
-  app.get('/me', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { playerId, instanceId } = (req as FastifyRequest & { user: JwtPayload }).user;
-
-    const inst = await db.query<{ artwork_id: string }>(
-      `SELECT artwork_id FROM instances WHERE id = $1`,
-      [instanceId],
+  // The user's instances with member count and weekly rank.
+  app.get('/mine', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { userId } = req.user as JwtPayload;
+    const { year, week } = isoWeek();
+    const rows = await db.query(
+      `WITH ranked AS (
+         SELECT instance_id, user_id, RANK() OVER (PARTITION BY instance_id ORDER BY points DESC) AS rnk
+         FROM scores WHERE iso_year = $2 AND iso_week = $3
+       )
+       SELECT i.id, i.code, i.name, i.mode, i.solo,
+         (SELECT COUNT(*) FROM instance_members m2 WHERE m2.instance_id = i.id) AS members,
+         COALESCE((SELECT rnk FROM ranked r WHERE r.instance_id = i.id AND r.user_id = $1), 1) AS place
+       FROM instances i
+       JOIN instance_members m ON m.instance_id = i.id AND m.user_id = $1
+       ORDER BY i.created_at`,
+      [userId, year, week],
     );
-    if (inst.rows.length === 0) return reply.code(404).send({ error: 'Instance introuvable.' });
-
-    return reply.send({ instance: await instancePayload(instanceId, inst.rows[0]!.artwork_id, playerId) });
+    return reply.send({
+      instances: rows.rows.map(r => ({
+        id: r.id, code: r.code, name: r.name, mode: r.mode, solo: r.solo,
+        members: parseInt(r.members), place: parseInt(r.place),
+      })),
+    });
   });
 
-  // GET /api/v1/instances/:code/feed  — today's group contributions
-  app.get('/:code/feed', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { code } = req.params as { code: string };
-
-    const inst = await db.query<{ id: string; artwork_id: string }>(
-      `SELECT id, artwork_id FROM instances WHERE code = $1`,
-      [code],
+  // Cell state of the artwork inside an instance (for the vitrail).
+  app.get('/:id/artwork', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const a = await currentArtwork();
+    if (!a) return reply.code(503).send({ error: 'Aucune œuvre active.' });
+    const contribs = await db.query(
+      `SELECT c.variant_key, c.crops, u.pseudo, u.avatar_pigment AS pig, p.url, p.delta_e
+       FROM contributions c
+       JOIN photos p ON p.id = c.photo_id
+       JOIN app_users u ON u.id = c.user_id
+       WHERE c.instance_id = $1 AND c.artwork_id = $2`,
+      [id, a.id],
     );
-    if (inst.rows.length === 0) return reply.code(404).send({ error: 'Instance introuvable.' });
+    return reply.send({
+      artwork: { id: a.id, cols: a.cols, rows: a.rows, cells: a.cells },
+      filled: contribs.rows.map(c => ({
+        variantKey: c.variant_key, pseudo: c.pseudo, pig: c.pig, url: c.url, deltaE: c.delta_e, crops: c.crops,
+      })),
+    });
+  });
 
-    const today = new Date().toISOString().slice(0, 10);
-    const feed = await db.query(
-      `SELECT
-         p.id, p.pseudo, p.avatar_pigment,
-         za.zone_id, z.pigment,
-         za.submitted_at, za.photo_url
-       FROM players p
-       LEFT JOIN zone_assignments za ON za.player_id = p.id
-         AND za.instance_id = $1 AND za.assigned_date = $2
-       LEFT JOIN zones z ON z.id = za.zone_id AND z.artwork_id = $3
-       WHERE p.instance_id = $1 AND p.deleted_at IS NULL
-       ORDER BY p.created_at ASC`,
-      [inst.rows[0]!.id, today, inst.rows[0]!.artwork_id],
+  // Weekly leaderboard for an instance.
+  app.get('/:id/leaderboard', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { userId } = req.user as JwtPayload;
+    const id = (req.params as { id: string }).id;
+    const a = await currentArtwork();
+    const { year, week } = isoWeek();
+    const rows = await db.query(
+      `SELECT u.id, u.pseudo, u.avatar_pigment AS pig,
+              COALESCE(s.points, 0) AS points,
+              COALESCE(st.current_, 0) AS streak,
+              (SELECT COUNT(DISTINCT day_) FROM photos ph
+                 WHERE ph.user_id = u.id AND ph.artwork_id = $3 AND ph.deleted_at IS NULL) AS photos,
+              (u.id = $1) AS you
+       FROM instance_members m
+       JOIN app_users u ON u.id = m.user_id
+       LEFT JOIN scores s ON s.user_id = u.id AND s.instance_id = $2 AND s.iso_year = $4 AND s.iso_week = $5
+       LEFT JOIN streaks st ON st.user_id = u.id
+       WHERE m.instance_id = $2
+       ORDER BY points DESC, u.created_at`,
+      [userId, id, a?.id ?? '', year, week],
     );
-
-    return reply.send({ contributions: feed.rows });
+    return reply.send({
+      leaderboard: rows.rows.map(r => ({
+        pseudo: r.pseudo ?? 'Anonyme', pig: r.pig, points: parseInt(r.points),
+        streak: parseInt(r.streak), photos: parseInt(r.photos), you: r.you,
+      })),
+    });
   });
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-interface JwtPayload { playerId: string; instanceId: string }
-
-async function currentMonthArtwork(): Promise<{ id: string } | null> {
-  const now = new Date();
-  const res = await db.query<{ id: string }>(
-    `SELECT id FROM artworks
-     WHERE published_at IS NOT NULL
-       AND EXTRACT(YEAR  FROM published_at) = $1
-       AND EXTRACT(MONTH FROM published_at) = $2
-     ORDER BY published_at DESC LIMIT 1`,
-    [now.getFullYear(), now.getMonth() + 1],
+// On joining mid-week, the user's shared photos already taken are imported into
+// the new instance (as contributions) if their variant isn't already filled.
+async function importSharedPhotos(userId: string, instanceId: string, mode: string): Promise<void> {
+  if (mode !== 'shared') return;
+  const a = await currentArtwork();
+  if (!a) return;
+  await db.query(
+    `INSERT INTO contributions (photo_id, instance_id, artwork_id, user_id, variant_key, crops)
+     SELECT p.id, $2, p.artwork_id, p.user_id, p.target_variant_key, '[]'::jsonb
+     FROM photos p
+     WHERE p.user_id = $1 AND p.artwork_id = $3 AND p.shared = TRUE AND p.deleted_at IS NULL
+     ON CONFLICT (instance_id, artwork_id, variant_key) DO NOTHING`,
+    [userId, instanceId, a.id],
   );
-  return res.rows[0] ?? null;
 }
-
-async function createPlayer(
-  instanceId: string,
-  artworkId:  string,
-  pseudo?:    string,
-  fcmToken?:  string,
-  app?:       FastifyInstance,
-): Promise<{ player: { id: string }; token: string }> {
-  const avatarPigment = randomPigment();
-  const res = await db.query<{ id: string }>(
-    `INSERT INTO players (instance_id, pseudo, avatar_pigment, fcm_token)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
-    [instanceId, pseudo ?? null, avatarPigment, fcmToken ?? null],
-  );
-  const player = res.rows[0]!;
-
-  await assignTodayZone(instanceId, player.id, artworkId);
-
-  const token = app!.jwt.sign({ playerId: player.id, instanceId });
-  return { player, token };
-}
-
-async function instancePayload(instanceId: string, artworkId: string, playerId: string) {
-  const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-
-  const [instRow, artworkRow, zonesState, players] = await Promise.all([
-    db.query<{ code: string; year_: number; month_: number }>(
-      `SELECT code, year_, month_ FROM instances WHERE id = $1`,
-      [instanceId],
-    ),
-    db.query<{ id: string; cols: number; rows: number; cells: unknown }>(
-      `SELECT id, cols, rows, cells FROM artworks WHERE id = $1`,
-      [artworkId],
-    ),
-    buildZoneState(artworkId, instanceId, playerId),
-    db.query(
-      `SELECT
-         p.id, p.pseudo, p.avatar_pigment,
-         (p.id = $2) AS is_me,
-         EXISTS (
-           SELECT 1 FROM zone_assignments za
-           WHERE za.player_id = p.id
-             AND za.assigned_date = CURRENT_DATE
-             AND za.submitted_at IS NOT NULL
-         ) AS has_contributed_today,
-         (
-           SELECT za2.zone_id FROM zone_assignments za2
-           WHERE za2.player_id = p.id AND za2.assigned_date = CURRENT_DATE
-           LIMIT 1
-         ) AS today_zone_id
-       FROM players p
-       WHERE p.instance_id = $1 AND p.deleted_at IS NULL
-       ORDER BY p.created_at ASC`,
-      [instanceId, playerId],
-    ),
-  ]);
-
-  const inst    = instRow.rows[0]!;
-  const artwork = artworkRow.rows[0]!;
-
-  return {
-    code:         inst.code,
-    artworkId,
-    year:         inst.year_,
-    month:        inst.month_,
-    dayNumber:    now.getDate(),
-    daysInMonth,
-    players: players.rows.map(p => ({
-      id:                  p.id,
-      pseudo:              p.pseudo ?? 'Anonyme',
-      avatarPigment:       p.avatar_pigment,
-      isMe:                p.is_me,
-      hasContributedToday: p.has_contributed_today,
-      todayZoneId:         p.today_zone_id ?? null,
-    })),
-    artwork: {
-      id:    artwork.id,
-      cols:  artwork.cols,
-      rows:  artwork.rows,
-      cells: artwork.cells,
-      zones: zonesState,
-    },
-  };
-}
-

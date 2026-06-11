@@ -13,8 +13,25 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DROP TABLE IF EXISTS zone_assignments CASCADE;
 DROP TABLE IF EXISTS artwork_hints    CASCADE;
 DROP TABLE IF EXISTS zones            CASCADE;
--- v1 `players` and `artworks` are superseded; drop so the new shapes apply.
 DROP TABLE IF EXISTS players          CASCADE;
+
+-- `artworks` and `instances` keep their names but changed shape in v2. Drop the
+-- legacy versions so the v2 definitions below apply. Guarded by a v1-only column
+-- so re-running this file on a v2 database is a harmless no-op (non-destructive).
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'artworks' AND column_name = 'published_at')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'artworks' AND column_name = 'title_fr') THEN
+    DROP TABLE artworks CASCADE;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'instances' AND column_name = 'month_') THEN
+    DROP TABLE instances CASCADE;
+  END IF;
+END $$;
 
 -- ── Users ─────────────────────────────────────────────────────────────────────
 -- Cross-instance account. provider+provider_sub is the external identity
