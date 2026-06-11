@@ -119,10 +119,11 @@ class TodayScreen extends ConsumerWidget {
             child: MdaBanner(icon: 'sparkles', tone: BannerTone.gold, text: t.betBanner, onTap: () => context.push('/bet')),
           ),
         // leaderboard teaser
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          child: GestureDetector(
-            onTap: () => context.push('/instances/instance/${g.activeInstance.id}'),
+        if (g.instances.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: GestureDetector(
+              onTap: () => context.push('/instances/instance/${g.activeInstance.id}'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(color: context.surface, borderRadius: MdaRadius.bMd, border: Border.all(color: context.line)),

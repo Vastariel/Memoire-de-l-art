@@ -7,7 +7,9 @@ import 'package:go_router/go_router.dart';
 import '../../data/artist_names.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/game_models.dart';
+import '../../providers/api_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/game_provider.dart';
 import '../../theme/colors.dart';
 import '../../theme/palette.dart';
 import '../../theme/theme.dart';
@@ -47,9 +49,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(() => step = 1);
   }
 
-  void _finish() {
-    ref.read(authProvider.notifier).completeOnboarding(pseudo: _pseudo.text);
-    context.go('/today');
+  Future<void> _finish() async {
+    await ref.read(authProvider.notifier).completeOnboarding(pseudo: _pseudo.text);
+    if (ref.read(useApiProvider) && ref.read(authProvider).online) {
+      final api = ref.read(apiClientProvider);
+      try {
+        if (join == 'join') {
+          final code = _code.text.trim();
+          if (code.isNotEmpty) await api.joinInstance(code);
+        } else {
+          final name = _instName.text.trim();
+          await api.createInstance(
+            name: name.isEmpty ? null : name,
+            mode: mode == InstanceMode.shared ? 'shared' : 'separate',
+          );
+        }
+      } catch (_) {/* graceful: proceed without instance */}
+      await ref.read(gameProvider.notifier).loadFromApi();
+    }
+    if (mounted) context.go('/today');
   }
 
   @override
@@ -328,9 +346,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         if (step == 0) ...[
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () {
-              ref.read(authProvider.notifier).signInDev();
-              context.go('/today');
+            onTap: () async {
+              await ref.read(authProvider.notifier).signInDev();
+              if (ref.read(authProvider).online) await ref.read(gameProvider.notifier).loadFromApi();
+              if (mounted) context.go('/today');
             },
             child: Text(t.devContinue, style: MdaType.sans(size: 13, weight: FontWeight.w600, color: context.fg3)),
           ),

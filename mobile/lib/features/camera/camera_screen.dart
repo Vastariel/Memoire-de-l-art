@@ -48,11 +48,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
   Future<void> _capture(Color target, {CameraController? real}) async {
     if (_shot) return;
     int score;
+    String? photoPath;
     if (real != null) {
       await _stopStream();
       try {
         final res = await capturePhoto(real, target);
         score = res.score;
+        photoPath = res.photoPath;
       } catch (_) {
         score = 72 + math.Random().nextInt(22);
       }
@@ -61,11 +63,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
     }
     if (!mounted) return;
     setState(() => _shot = true);
-    Future.delayed(const Duration(milliseconds: 650), () {
-      if (!mounted) return;
-      ref.read(gameProvider.notifier).captureDone(score);
-      context.pushReplacement('/confirm');
-    });
+    await Future.delayed(const Duration(milliseconds: 650));
+    if (!mounted) return;
+    // Online + a real file → uploads to the server (real ΔE/score/points).
+    await ref.read(gameProvider.notifier).captureDone(photoPath: photoPath, fallbackScore: score);
+    if (!mounted) return;
+    context.pushReplacement('/confirm');
   }
 
   @override

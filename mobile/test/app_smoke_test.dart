@@ -6,6 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:memoire_de_lart/app.dart';
+import 'package:memoire_de_lart/providers/api_provider.dart';
+
+// Keep the suite offline: never hit the live API.
+final _offline = ProviderScope(
+  overrides: [useApiProvider.overrideWithValue(false)],
+  child: const MdaApp(),
+);
 
 void main() {
   setUp(() {
@@ -14,7 +21,7 @@ void main() {
   });
 
   testWidgets('l\'app démarre sur l\'onboarding (non connecté)', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: MdaApp()));
+    await tester.pumpWidget(_offline);
     await tester.pump(); // build
     await tester.pump(const Duration(milliseconds: 300)); // redirect + 1re frame
 
@@ -26,7 +33,7 @@ void main() {
   });
 
   testWidgets('le bypass dev entre dans l\'app (onglet Aujourd\'hui)', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: MdaApp()));
+    await tester.pumpWidget(_offline);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.text('Continuer (dev, sans compte)'));
@@ -39,7 +46,7 @@ void main() {
   });
 
   testWidgets('navigation vers le détail d\'instance depuis le teaser', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: MdaApp()));
+    await tester.pumpWidget(_offline);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Continuer (dev, sans compte)'));
     await tester.pump(const Duration(milliseconds: 400));

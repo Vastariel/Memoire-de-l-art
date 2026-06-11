@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/mock_data.dart';
 import '../engine/mosaic_engine.dart';
 import '../models/game_models.dart';
+import '../services/api_client.dart';
+import 'api_provider.dart';
 
 class GameState {
   final int week;
@@ -56,8 +58,12 @@ class GameState {
   int get doneCount => filled.length;
   int get tasksLeft => tasks.where((t) => !t.done).length;
 
-  InstanceSummary get activeInstance =>
-      instances.firstWhere((i) => i.id == activeInstanceId, orElse: () => instances.first);
+  InstanceSummary get activeInstance {
+    if (instances.isEmpty) {
+      return const InstanceSummary(id: '', name: '—', mode: InstanceMode.shared, members: 1);
+    }
+    return instances.firstWhere((i) => i.id == activeInstanceId, orElse: () => instances.first);
+  }
 
   /// Familles des jours passés non couvertes (rattrapage).
   List<String> get missedFamilies {
@@ -108,25 +114,133 @@ class GameState {
 }
 
 class GameNotifier extends StateNotifier<GameState> {
-  GameNotifier() : super(GameState.initial());
+  GameNotifier(this._api, this._useApi) : super(GameState.initial());
+  final ApiClient _api;
+  final bool _useApi;
+  bool _uploadedOnline = false; // last capture was submitted to the server
 
-  void claimVariant(String v) => state = state.copyWith(myVariant: v);
+  /// Build the week's state from the live API (falls back to mock on error).
+  Future<void> loadFromApi() async {
+    if (!_useApi) return;
+    try {
+      final week = await _api.weeksCurrent();
+      final today = await _api.daysToday();
+      final mine = await _api.instancesMine();
+      final me = await _api.me();
+
+      final instances = mine.map((m) => _parseInstance(m as Map<String, dynamic>)).toList();
+      final activeId = instances.isEmpty
+          ? ''
+          : instances.firstWhere((i) => !i.solo, orElse: () => instances.first).id;
+
+      final claims = (today['claims'] as List?) ?? const [];
+      final variantsList = ((today['variants'] as List?) ?? const [])
+          .map((v) => (v as Map)['key'] as String)
+          .toList();
+      String? claimed;
+      for (final c in claims) {
+        if ((c as Map)['instanceId'] == activeId) {
+          claimed = c['variantKey'] as String?;
+          break;
+        }
+      }
+      final myVariant = claimed ?? (variantsList.isNotEmpty ? variantsList.first : state.myVariant);
+
+      final sharedIds = instances.where((i) => i.mode == InstanceMode.shared).map((i) => i.id).toList();
+      final tasks = <DailyTask>[
+        if (sharedIds.isNotEmpty)
+          DailyTask(id: 'shared', kind: InstanceMode.shared, variant: myVariant, covers: sharedIds),
+        for (final i in instances.where((i) => i.mode == InstanceMode.separate))
+          DailyTask(id: i.id, kind: InstanceMode.separate, variant: myVariant, instanceId: i.id, instanceName: i.name),
+      ];
+
+      // Filled families = variants already contributed in the active instance.
+      final filled = <String>{};
+      if (activeId.isNotEmpty) {
+        try {
+          final art = await _api.instanceArtwork(activeId);
+          for (final f in (art['filled'] as List? ?? const [])) {
+            final vk = (f as Map)['variantKey'] as String?;
+            final fam = vk == null ? null : kVariants[vk]?.family;
+            if (fam != null) filled.add(fam);
+          }
+        } catch (_) {/* leave empty */}
+      }
+
+      state = GameState(
+        week: ((week['artwork'] as Map?)?['isoWeek'] as num?)?.toInt() ?? state.week,
+        weekDay: (today['weekDay'] as num?)?.toInt() ?? state.weekDay,
+        todayFamily: ((today['family'] as Map?)?['key'] as String?) ?? state.todayFamily,
+        myVariant: myVariant,
+        filled: filled,
+        points: (me['points'] as num?)?.toInt() ?? 0,
+        streak: (me['streak'] as num?)?.toInt() ?? 0,
+        bet: null,
+        instances: instances,
+        activeInstanceId: activeId,
+        tasks: tasks,
+      );
+    } catch (_) {/* keep current (mock) state */}
+  }
+
+  InstanceSummary _parseInstance(Map<String, dynamic> m) => InstanceSummary(
+        id: m['id'] as String,
+        name: (m['name'] as String?) ?? '',
+        mode: m['mode'] == 'separate' ? InstanceMode.separate : InstanceMode.shared,
+        members: (m['members'] as num?)?.toInt() ?? 1,
+        place: (m['place'] as num?)?.toInt() ?? 1,
+        solo: m['solo'] == true,
+      );
+
+  void claimVariant(String v) {
+    state = state.copyWith(myVariant: v);
+    if (_useApi && state.activeInstanceId.isNotEmpty) {
+      _api.claim(state.activeInstanceId, v).catchError((_) {});
+    }
+  }
 
   void setCaptureTask(DailyTask task) => state = state.copyWith(captureTaskId: task.id);
 
-  /// Score de matching → points (port de app.jsx captureDone).
-  void captureDone(int score) {
-    final bonus = (score * 0.6).round();
+  /// Capture done. Online + a real photo file → upload it (server computes
+  /// ΔE/variance/score/points). Otherwise use the simulated score.
+  Future<void> captureDone({String? photoPath, required int fallbackScore}) async {
+    if (_useApi && photoPath != null && state.activeInstanceId.isNotEmpty) {
+      final task = state.currentTask;
+      final sep = task?.isSeparate ?? false;
+      try {
+        final r = await _api.submitPhoto(
+          filePath: photoPath,
+          day: state.weekDay,
+          variantKey: task?.variant ?? state.myVariant,
+          shared: !sep,
+          separateInstanceId: sep ? task?.instanceId : null,
+        );
+        _uploadedOnline = true;
+        state = state.copyWith(
+          lastScore: (r['score'] as num?)?.toInt() ?? fallbackScore,
+          lastPoints: (r['points'] as num?)?.toInt() ?? 0,
+          streak: (r['streak'] as num?)?.toInt() ?? state.streak,
+        );
+        return;
+      } catch (_) {/* fall back to local */}
+    }
+    _uploadedOnline = false;
+    final bonus = (fallbackScore * 0.6).round();
     final pts = 60 + bonus + (state.streak > 0 ? 20 : 0);
-    state = state.copyWith(lastScore: score, lastPoints: pts);
+    state = state.copyWith(lastScore: fallbackScore, lastPoints: pts);
   }
 
-  /// Valide la contribution : marque la tâche faite, remplit la famille si
-  /// la photo partagée est posée, crédite les points (port de confirmDone).
-  void confirmDone() {
+  /// Validate the contribution. Online → just refresh from the server (the
+  /// upload already created the contribution & points). Offline → optimistic.
+  Future<void> confirmDone() async {
     final task = state.currentTask;
     if (task == null) return;
     final tasks = state.tasks.map((t) => t.id == task.id ? t.copyWith(done: true) : t).toList();
+    if (_uploadedOnline) {
+      state = state.copyWith(tasks: tasks);
+      await loadFromApi();
+      return;
+    }
     final sharedDone = tasks.firstWhere(
       (t) => t.id == 'shared',
       orElse: () => const DailyTask(id: '_', kind: InstanceMode.shared, variant: ''),
@@ -138,7 +252,12 @@ class GameNotifier extends StateNotifier<GameState> {
     );
   }
 
-  void placeBet(String title) => state = state.copyWith(bet: Bet(title, state.weekDay));
+  void placeBet(String title) {
+    state = state.copyWith(bet: Bet(title, state.weekDay));
+    if (_useApi) _api.placeGuess(title).catchError((_) {});
+  }
 }
 
-final gameProvider = StateNotifierProvider<GameNotifier, GameState>((ref) => GameNotifier());
+final gameProvider = StateNotifierProvider<GameNotifier, GameState>(
+  (ref) => GameNotifier(ref.read(apiClientProvider), ref.read(useApiProvider)),
+);

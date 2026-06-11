@@ -143,14 +143,14 @@ class _ConfirmScreenState extends ConsumerState<ConfirmScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
             child: Column(children: [
-              MdaButton(t.seeTheArtwork, full: true, onTap: () {
-                ref.read(gameProvider.notifier).confirmDone();
-                context.go('/artwork');
+              MdaButton(t.seeTheArtwork, full: true, onTap: () async {
+                await ref.read(gameProvider.notifier).confirmDone();
+                if (context.mounted) context.go('/artwork');
               }),
               const SizedBox(height: 10),
-              MdaButton(t.actionShare, full: true, variant: MdaBtnVariant.ghost, icon: 'share', onTap: () {
-                ref.read(gameProvider.notifier).confirmDone();
-                context.go('/reveal');
+              MdaButton(t.actionShare, full: true, variant: MdaBtnVariant.ghost, icon: 'share', onTap: () async {
+                await ref.read(gameProvider.notifier).confirmDone();
+                if (context.mounted) context.go('/reveal');
               }),
             ]),
           ),
