@@ -1,13 +1,15 @@
 name: memoire_de_lart
-description: Une couleur par jour, une œuvre par mois.
+description: Une famille de couleur par jour, une œuvre par semaine.
 publish_to: none
-version: 1.0.0+1
+version: 2.0.0+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
 
   # Navigation
@@ -43,8 +45,11 @@ dependencies:
 
   path_provider: ^2.1.4
 
+  # QR (pure-Dart, render invite/join codes)
+  qr_flutter: ^4.1.0
+
   # Utils
-  intl: ^0.19.0
+  intl: any
   timezone: ^0.9.4
   share_plus: ^10.0.2
   cached_network_image: ^3.4.1
@@ -56,6 +61,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true
 
   assets:
     - assets/images/

@@ -20,39 +20,60 @@ abstract final class MdaColors {
   static const clay400 = Color(0xFFCE7551);
   static const clay100 = Color(0xFFF0DACD);
 
-  // ── Pigment palette — the "couleur du jour" set ──────────────
-  static const pigVermillion  = Color(0xFFD7472F);
-  static const pigSienna      = Color(0xFF9C5A33);
-  static const pigOchre       = Color(0xFFD69A3C);
-  static const pigSaffron     = Color(0xFFE8B53C);
-  static const pigOlive       = Color(0xFF7E8B3F);
-  static const pigViridian    = Color(0xFF2E7D5B);
-  static const pigTeal        = Color(0xFF2A8C8A);
-  static const pigCobalt      = Color(0xFF2D5FA6);
-  static const pigUltramarine = Color(0xFF34408C);
-  static const pigAubergine   = Color(0xFF6E3A6B);
-  static const pigRose        = Color(0xFFC45B7C);
-  static const pigSlate       = Color(0xFF4A5763);
+  // ── Pigment palette (v2) — 21 museum pigments, 7 families ─────
+  // Keys mirror engine/mosaic_engine.dart (FAMILIES → variants).
+  // Bleus
+  static const outremer = Color(0xFF2C3A86);
+  static const cobalt   = Color(0xFF2D5FA6);
+  static const azur     = Color(0xFF5B8FC9);
+  // Ors
+  static const safran   = Color(0xFFE8B53C);
+  static const ocre     = Color(0xFFCC8B3C);
+  static const ambre    = Color(0xFFC2792E);
+  // Verts
+  static const veronese = Color(0xFF2E7D5B);
+  static const olive    = Color(0xFF7E8B3F);
+  static const sauge    = Color(0xFF9BA677);
+  // Terres
+  static const sienne   = Color(0xFF9C5A33);
+  static const brulee   = Color(0xFF6E3B25);
+  static const ombre    = Color(0xFF4A3526);
+  // Roses
+  static const rose     = Color(0xFFC45B7C);
+  static const lilas    = Color(0xFF9A6FA6);
+  static const prune    = Color(0xFF6E3A6B);
+  // Rouges
+  static const vermillon = Color(0xFFD7472F);
+  static const garance   = Color(0xFFA8324A);
+  static const brique    = Color(0xFFB5543A);
+  // Gris
+  static const ardoise  = Color(0xFF4A5763);
+  static const taupe    = Color(0xFF8A7E70);
+  static const lin      = Color(0xFFCBBFA9);
 
   static const Map<String, Color> pigments = {
-    'vermillion' : pigVermillion,
-    'sienna'     : pigSienna,
-    'ochre'      : pigOchre,
-    'saffron'    : pigSaffron,
-    'olive'      : pigOlive,
-    'viridian'   : pigViridian,
-    'teal'       : pigTeal,
-    'cobalt'     : pigCobalt,
-    'ultramarine': pigUltramarine,
-    'aubergine'  : pigAubergine,
-    'rose'       : pigRose,
-    'slate'      : pigSlate,
+    'outremer': outremer, 'cobalt': cobalt, 'azur': azur,
+    'safran': safran, 'ocre': ocre, 'ambre': ambre,
+    'veronese': veronese, 'olive': olive, 'sauge': sauge,
+    'sienne': sienne, 'brulee': brulee, 'ombre': ombre,
+    'rose': rose, 'lilas': lilas, 'prune': prune,
+    'vermillon': vermillon, 'garance': garance, 'brique': brique,
+    'ardoise': ardoise, 'taupe': taupe, 'lin': lin,
   };
+
+  /// Pigment colour by key, falling back to slate-ish neutral.
+  static Color pig(String key) => pigments[key] ?? ardoise;
 
   // ── Semantic / status ─────────────────────────────────────────
   static const ok    = Color(0xFF3F8E5C);
   static const warn  = Color(0xFFC98A2E);
   static const error = Color(0xFFC0432C);
+
+  // ── v2 game semantics ─────────────────────────────────────────
+  static const gold     = Color(0xFFB8893C); // streaks, podium, points gagnés
+  static const shared   = Color(0xFF2A8C8A); // instance « partagée »
+  static const separate = Color(0xFFBC5A2E); // instance « séparée »
+  static const match    = Color(0xFF3F8E5C); // score de matching
 }
 
 // ── Light theme semantic tokens ───────────────────────────────

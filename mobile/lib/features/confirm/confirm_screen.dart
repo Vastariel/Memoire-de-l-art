@@ -1,229 +1,160 @@
-import 'dart:io';
+// confirm_screen.dart — Confirmation : aperçu plat→vitrail + score + points.
+
 import 'package:flutter/material.dart';
-import '../../models/artwork.dart';
-import '../../models/zone.dart';
-import '../../providers/camera_provider.dart';
-import '../../services/api_client.dart';
-import '../../services/color_analyzer.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../engine/mosaic_engine.dart';
+import '../../l10n/app_localizations.dart';
+import '../../providers/game_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../theme/colors.dart';
+import '../../theme/palette.dart';
 import '../../theme/theme.dart';
 import '../../theme/typography.dart';
-import '../../widgets/mosaic.dart';
-import '../../widgets/mda_button.dart';
-import '../../widgets/top_bar.dart';
+import '../../widgets/game_widgets.dart';
+import '../../widgets/mda_icon.dart';
+import '../../widgets/primitives.dart';
 
-class ConfirmScreen extends StatefulWidget {
-  final Artwork artwork;
-  final Zone todayZone;
-  final CaptureResult matchResult;
-  final VoidCallback onDone;
-  final VoidCallback onViewGroup;
-
-  const ConfirmScreen({
-    super.key,
-    required this.artwork,
-    required this.todayZone,
-    required this.matchResult,
-    required this.onDone,
-    required this.onViewGroup,
-  });
-
+class ConfirmScreen extends ConsumerStatefulWidget {
+  const ConfirmScreen({super.key});
   @override
-  State<ConfirmScreen> createState() => _ConfirmScreenState();
+  ConsumerState<ConfirmScreen> createState() => _ConfirmScreenState();
 }
 
-class _ConfirmScreenState extends State<ConfirmScreen> {
-  String? _hint;
+class _ConfirmScreenState extends ConsumerState<ConfirmScreen> {
+  bool _vit = false;
 
   @override
   void initState() {
     super.initState();
-    _loadHint();
-  }
-
-  Future<void> _loadHint() async {
-    try {
-      final client = await ApiClient.get();
-      final hint   = await client.fetchHint();
-      if (mounted && hint != null) setState(() => _hint = hint);
-    } catch (_) {}
+    Future.delayed(const Duration(milliseconds: 420), () {
+      if (mounted) setState(() => _vit = true);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark  = Theme.of(context).brightness == Brightness.dark;
-    final paper   = isDark ? MdaDark.paper   : MdaLight.paper;
-    final surface = isDark ? MdaDark.surface : MdaLight.surface;
-    final fg1     = isDark ? MdaDark.fg1     : MdaLight.fg1;
-    final fg2     = isDark ? MdaDark.fg2     : MdaLight.fg2;
-    final fg3     = isDark ? MdaDark.fg3     : MdaLight.fg3;
-    final line    = isDark ? MdaDark.line    : MdaLight.line;
-    final accent  = isDark ? MdaDark.accent  : MdaLight.accent;
-    final good    = widget.matchResult.verdict == ColorVerdict.perfect || widget.matchResult.verdict == ColorVerdict.correct;
+    final t = L10n.of(context);
+    final lang = ref.watch(langProvider);
+    final g = ref.watch(gameProvider);
+    final task = g.currentTask;
+    final v = kVariants[task?.variant ?? g.myVariant]!;
+    final cells = kArtwork.ofVariant(v.key).take(24).toList();
 
     return Scaffold(
-      backgroundColor: paper,
+      backgroundColor: context.paper,
       body: SafeArea(
-        child: Column(
-          children: [
-            const MdaTopBar(overline: 'Ta contribution', title: 'Bien joué'),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 40),
-                child: Column(
-                  children: [
-                    // ── Artwork with revealed zone ─────────────────
-                    Container(
-                      margin: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: surface,
-                        borderRadius: MdaRadius.bLg,
-                        border: Border.all(color: line),
-                        boxShadow: MdaShadows.md,
-                      ),
-                      child: MosaicWidget(
-                        artwork: widget.artwork,
-                        revealZoneId: widget.todayZone.id,
-                        showPulse: false,
-                        gap: 2.5,
-                        radius: 3,
-                      ),
-                    ),
-
-                    // ── Captured photo thumbnail ───────────────────
-                    if (widget.matchResult.photoPath.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                        height: 140,
-                        decoration: BoxDecoration(
-                          borderRadius: MdaRadius.bMd,
-                          border: Border.all(color: line),
-                          boxShadow: MdaShadows.sm,
-                        ),
-                        clipBehavior: Clip.hardEdge,
-                        child: Image.file(
-                          File(widget.matchResult.photoPath),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                        ),
-                      ),
-
-                    // ── Match quality row ──────────────────────────
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-                            decoration: BoxDecoration(
-                              color: surface,
-                              borderRadius: MdaRadius.bMd,
-                              border: Border.all(color: line),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 30, height: 30,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: good ? MdaColors.ok : MdaColors.warn,
-                                  ),
-                                  child: Icon(
-                                    good ? Icons.check_rounded : Icons.info_outline_rounded,
-                                    size: 18, color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        good ? 'Belle correspondance' : 'Correspondance correcte',
-                                        style: MdaType.title(color: fg1).copyWith(fontSize: 15),
-                                      ),
-                                      Text(
-                                        'Ta photo rejoint la zone ${widget.todayZone.pigment.label.toLowerCase()}.',
-                                        style: MdaType.caption(color: fg2),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 16),
-                          GestureDetector(
-                            onTap: widget.onViewGroup,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.group_outlined, size: 20, color: accent),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      'Voir les contributions du jour',
-                                      style: MdaType.title(color: fg1).copyWith(fontSize: 15),
+        child: Column(children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              children: [
+                const Center(child: MdaIcon('checkCircle', size: 30, color: MdaColors.ok)),
+                const SizedBox(height: 10),
+                Text(t.colourAdded, textAlign: TextAlign.center, style: MdaType.serif(size: 25, weight: FontWeight.w500, color: context.fg1)),
+                const SizedBox(height: 2),
+                Text(t.meltedInto(v.name(lang)),
+                    textAlign: TextAlign.center, style: MdaType.serif(size: 15.5, italic: true, height: 1.3, color: context.fg2)),
+                const SizedBox(height: 18),
+                // aperçu plat→vitrail
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      decoration: BoxDecoration(color: context.surfaceSunk, borderRadius: MdaRadius.bLg, border: Border.all(color: context.line)),
+                      child: Column(children: [
+                        GridView.count(
+                          crossAxisCount: 6,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 5,
+                          crossAxisSpacing: 5,
+                          children: [
+                            for (final c in cells)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Stack(children: [
+                                  Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(gradient: fillGradient(c.pig, c.i)))),
+                                  Positioned.fill(
+                                    child: AnimatedOpacity(
+                                      opacity: _vit ? 1 : 0,
+                                      duration: const Duration(milliseconds: 600),
+                                      child: VitrailFragment(c),
                                     ),
                                   ),
-                                  Icon(Icons.chevron_right_rounded, size: 18, color: fg3),
-                                ],
+                                ]),
                               ),
-                            ),
-                          ),
-
-                          // ── Indice de l'admin ──────────────────────
-                          if (_hint != null) ...[
-                            const SizedBox(height: 16),
-                            AnimatedOpacity(
-                              opacity: 1.0,
-                              duration: MdaDuration.slow,
-                              curve: MdaCurve.easeOut,
-                              child: Container(
-                                padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-                                decoration: BoxDecoration(
-                                  color: isDark ? MdaDark.surface : MdaLight.surface,
-                                  borderRadius: MdaRadius.bMd,
-                                  border: Border.all(color: accent.withAlpha(0x55)),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(Icons.lightbulb_outline_rounded,
-                                        size: 18, color: accent),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('Indice', style: MdaType.overline(color: accent)),
-                                          const SizedBox(height: 4),
-                                          Text(_hint!,
-                                              style: MdaType.serifItalic(color: fg1)
-                                                  .copyWith(fontSize: 15, height: 1.5)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                           ],
-
-                          const SizedBox(height: 16),
-                          MdaButton(label: 'Terminer', expand: true, onPressed: widget.onDone),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 13),
+                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Overline(t.flat, fontSize: 10),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => setState(() => _vit = !_vit),
+                            child: Container(
+                              width: 42,
+                              height: 24,
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: _vit ? context.accent : MdaColors.cream300,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Align(
+                                alignment: _vit ? Alignment.centerRight : Alignment.centerLeft,
+                                child: const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: DecoratedBox(decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white)),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Overline(t.glass, fontSize: 10),
+                        ]),
+                      ]),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 22),
+                // score + points
+                Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  MatchScore(value: g.lastScore, size: 84, label: t.matchLabel),
+                  const SizedBox(width: 24),
+                  Container(width: 1, height: 62, color: context.line),
+                  const SizedBox(width: 24),
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    PointsTag(g.lastPoints),
+                    const SizedBox(height: 8),
+                    StreakChip(g.streak + 1),
+                    const SizedBox(height: 6),
+                    Text(t.streakBonus(20), style: MdaType.sans(size: 12, color: context.fg3)),
+                  ]),
+                ]),
+                if (task != null && !task.isSeparate) ...[
+                  const SizedBox(height: 18),
+                  MdaBanner(icon: 'layers', tone: BannerTone.shared, text: t.alsoFed('Mes essais')),
+                ],
+              ],
             ),
-          ],
-        ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+            child: Column(children: [
+              MdaButton(t.seeTheArtwork, full: true, onTap: () {
+                ref.read(gameProvider.notifier).confirmDone();
+                context.go('/artwork');
+              }),
+              const SizedBox(height: 10),
+              MdaButton(t.actionShare, full: true, variant: MdaBtnVariant.ghost, icon: 'share', onTap: () {
+                ref.read(gameProvider.notifier).confirmDone();
+                context.go('/reveal');
+              }),
+            ]),
+          ),
+        ]),
       ),
     );
   }

@@ -68,4 +68,27 @@ abstract final class MdaType {
   static TextStyle pigName({Color? color}) => GoogleFonts.spectral(
     fontSize: 24, height: 1.1, color: color,
   );
+
+  // ── generic helpers (free size) ───────────────────────────
+  static TextStyle serif({
+    required double size,
+    FontWeight weight = FontWeight.w400,
+    bool italic = false,
+    double height = 1.1,
+    Color? color,
+  }) => GoogleFonts.spectral(
+    fontSize: size, fontWeight: weight, height: height,
+    fontStyle: italic ? FontStyle.italic : FontStyle.normal, color: color,
+  );
+
+  static TextStyle sans({
+    required double size,
+    FontWeight weight = FontWeight.w400,
+    double height = 1.4,
+    double? letterSpacing,
+    Color? color,
+  }) => GoogleFonts.hankenGrotesk(
+    fontSize: size, fontWeight: weight, height: height,
+    letterSpacing: letterSpacing, color: color,
+  );
 }

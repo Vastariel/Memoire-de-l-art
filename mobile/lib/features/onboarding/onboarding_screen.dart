@@ -1,542 +1,487 @@
-import 'dart:ui' as ui;
+// onboarding_screen.dart — 3 étapes : OAuth + RGPD → pseudo → rejoindre/créer.
+
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-// ignore_for_file: unused_import
-import '../../data/artist_names.dart';
-import '../../models/artwork.dart';
-import '../../models/zone.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../l10n/app_localizations.dart';
+import '../../models/game_models.dart';
+import '../../providers/auth_provider.dart';
 import '../../theme/colors.dart';
+import '../../theme/palette.dart';
 import '../../theme/theme.dart';
 import '../../theme/typography.dart';
+import '../../widgets/game_widgets.dart';
+import '../../widgets/mda_icon.dart';
 import '../../widgets/mosaic.dart';
-import '../../widgets/mda_button.dart';
-import '../../widgets/overline.dart';
+import '../../widgets/primitives.dart';
 
-// onJoin: code is null → create new instance. onSolo: local-only, no server.
-class OnboardingScreen extends StatefulWidget {
-  final void Function(String? code, String pseudo, String name) onJoin;
-  final void Function(String pseudo, String? artworkJson) onSolo;
-  // When true, the Solo tab is hidden (only one solo instance allowed).
-  final bool hasSolo;
-
-  const OnboardingScreen({
-    super.key,
-    required this.onJoin,
-    required this.onSolo,
-    this.hasSolo = false,
-  });
-
+class OnboardingScreen extends ConsumerStatefulWidget {
+  const OnboardingScreen({super.key});
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tab;
-  String _code = '';
-  final _pseudoCtrl    = TextEditingController();
-  final _nameCtrl      = TextEditingController();
-  final _artworkCtrl   = TextEditingController(); // for pasted JSON in solo mode
-  bool  _showArtwork   = false;
-  static const _codeLength = 6;
-
-  late final List<String> _suggestions = randomArtistSuggestions(4);
-
-  bool get _canJoin   => _code.length >= 4 && _pseudoCtrl.text.trim().isNotEmpty;
-  bool get _canCreate => _pseudoCtrl.text.trim().isNotEmpty;
-  bool get _canSolo   => _pseudoCtrl.text.trim().isNotEmpty;
-
-  @override
-  void initState() {
-    super.initState();
-    _tab = TabController(length: widget.hasSolo ? 2 : 3, vsync: this);
-    _tab.addListener(() => setState(() {}));
-  }
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  int step = 0;
+  bool consent = false;
+  String join = 'join'; // join | create
+  String via = 'code'; // code | link | qr
+  InstanceMode mode = InstanceMode.shared;
+  final _pseudo = TextEditingController();
+  final _code = TextEditingController();
+  final _instName = TextEditingController();
 
   @override
   void dispose() {
-    _tab.dispose();
-    _pseudoCtrl.dispose();
-    _nameCtrl.dispose();
-    _artworkCtrl.dispose();
+    _pseudo.dispose();
+    _code.dispose();
+    _instName.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    final pseudo = _pseudoCtrl.text.trim();
-    if (pseudo.isEmpty) return;
-    final name   = _nameCtrl.text.trim();
-    // Tabs: 0=Solo, 1=Rejoindre, 2=Créer (when hasSolo: 0=Rejoindre, 1=Créer)
-    if (widget.hasSolo) {
-      switch (_tab.index) {
-        case 0: if (!_canJoin) return; widget.onJoin(_code, pseudo, name.isEmpty ? _code : name);
-        case 1: widget.onJoin(null, pseudo, name);
-      }
-    } else {
-      switch (_tab.index) {
-        case 0: // Solo
-          final json = _artworkCtrl.text.trim();
-          widget.onSolo(pseudo, json.isEmpty ? null : json);
-        case 1: // Rejoindre
-          if (!_canJoin) return;
-          widget.onJoin(_code, pseudo, name.isEmpty ? _code : name);
-        case 2: // Créer
-          widget.onJoin(null, pseudo, name);
-      }
-    }
+  void _provider(AuthProvider p) {
+    ref.read(authProvider.notifier).startProvider(p);
+    setState(() => step = 1);
+  }
+
+  void _finish() {
+    ref.read(authProvider.notifier).completeOnboarding(pseudo: _pseudo.text);
+    context.go('/today');
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
-    final paper    = isDark ? MdaDark.paper    : MdaLight.paper;
-    final fg1      = isDark ? MdaDark.fg1      : MdaLight.fg1;
-    final fg2      = isDark ? MdaDark.fg2      : MdaLight.fg2;
-    final fg3      = isDark ? MdaDark.fg3      : MdaLight.fg3;
-    final line     = isDark ? MdaDark.line     : MdaLight.line;
-    final surface  = isDark ? MdaDark.surface  : MdaLight.surface;
-    final accent   = isDark ? MdaDark.accent   : MdaLight.accent;
-
+    final t = L10n.of(context);
     return Scaffold(
-      backgroundColor: paper,
+      backgroundColor: context.paper,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(28, 16, 28, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // ── Logo + heading ─────────────────────────────────
-              const SizedBox(height: 8),
-              Container(
-                width: 110, height: 110,
+        child: Column(children: [
+          const SizedBox(height: 8),
+          // progress dots
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: i == step ? 22 : 7,
+                height: 7,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: MdaShadows.lg,
+                  color: i <= step ? context.accent : MdaColors.cream300,
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                clipBehavior: Clip.hardEdge,
-                child: SvgPicture.asset(
-                  'assets/images/app-icon.svg',
-                  width: 110, height: 110,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text('Mémoire de l\'art',
-                style: MdaType.h1(color: fg1), textAlign: TextAlign.center),
-              const SizedBox(height: 4),
-              Text(
-                'Une couleur par jour, une œuvre par mois.',
-                style: MdaType.serifItalic(color: fg2).copyWith(fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
-
-              // ── Blurred mosaic teaser ──────────────────────────
-              const SizedBox(height: 26),
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: MdaRadius.bLg,
-                  border: Border.all(color: line),
-                  boxShadow: MdaShadows.md,
-                ),
-                clipBehavior: Clip.hardEdge,
-                child: Stack(
-                  children: [
-                    ImageFiltered(
-                      imageFilter: ui.ImageFilter.blur(sigmaX: 11, sigmaY: 11),
-                      child: Transform.scale(
-                        scale: 1.12,
-                        child: MosaicWidget(artwork: _stubArtwork(), showPulse: false, gap: 2, radius: 3),
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [paper.withAlpha(0x4C), paper.withAlpha(0x9E)],
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.lock_outline_rounded, size: 22, color: fg1),
-                            const SizedBox(height: 7),
-                            Text('L\'œuvre de juin', style: MdaType.h2(color: fg1).copyWith(fontSize: 18)),
-                            const SizedBox(height: 4),
-                            MdaOverline('Rejoins ou crée une instance', color: fg2),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Tab selector ───────────────────────────────────
-              const SizedBox(height: 28),
-              Container(
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: MdaRadius.bSm,
-                  border: Border.all(color: line),
-                ),
-                child: TabBar(
-                  controller: _tab,
-                  labelStyle: TextStyle(fontFamily: MdaFonts.sans,
-                      fontSize: 14, fontWeight: FontWeight.w600),
-                  unselectedLabelStyle: TextStyle(fontFamily: MdaFonts.sans, fontSize: 14),
-                  labelColor: accent,
-                  unselectedLabelColor: fg3,
-                  indicator: BoxDecoration(
-                    color: accent.withAlpha(0x1A),
-                    borderRadius: MdaRadius.bSm,
-                  ),
-                  dividerColor: Colors.transparent,
-                  tabs: [
-                    if (!widget.hasSolo) const Tab(text: 'Solo'),
-                    const Tab(text: 'Rejoindre'),
-                    const Tab(text: 'Créer'),
-                  ],
-                ),
-              ),
-
-              // Tabs: Solo=0, Rejoindre=1, Créer=2  (hasSolo: Rejoindre=0, Créer=1)
-
-              // ── Solo panel ─────────────────────────────────────
-              if (!widget.hasSolo && _tab.index == 0) ...[
-                const SizedBox(height: 14),
-                _ModeChip(label: 'Local — sans connexion', icon: Icons.smartphone_rounded,
-                    color: MdaColors.clay400),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: surface, borderRadius: MdaRadius.bMd,
-                    border: Border.all(color: line),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.person_outline_rounded, size: 20, color: MdaColors.clay400),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(
-                        'Joue seul(e) sans serveur. Tes photos sont stockées sur ton téléphone. '
-                        'Idéal pour essayer l\'app ou jouer hors connexion.',
-                        style: MdaType.caption(color: fg2),
-                      )),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () => setState(() => _showArtwork = !_showArtwork),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _showArtwork ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                        size: 18, color: fg2,
-                      ),
-                      const SizedBox(width: 6),
-                      Text('Importer l\'œuvre du mois (JSON)',
-                          style: MdaType.bodySm(color: fg2).copyWith(fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-                if (_showArtwork) ...[
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _artworkCtrl,
-                    style: MdaType.caption(color: fg1).copyWith(fontFamily: 'monospace', fontSize: 11),
-                    maxLines: 6,
-                    decoration: InputDecoration(
-                      hintText: '{ "id": "jun26", "cols": 14, … }',
-                      hintStyle: MdaType.caption(color: fg3),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Colle le JSON généré par l\'admin. Laisse vide pour utiliser l\'œuvre par défaut.',
-                    style: MdaType.caption(color: fg3),
-                  ),
-                ],
-              ],
-
-              // ── Join panel ─────────────────────────────────────
-              if (_tab.index == (widget.hasSolo ? 0 : 1)) ...[
-                const SizedBox(height: 14),
-                _ModeChip(label: 'En ligne — serveur requis', icon: Icons.cloud_outlined,
-                    color: MdaColors.pigCobalt),
-                const SizedBox(height: 14),
-                Align(alignment: Alignment.centerLeft, child: MdaOverline('Code d\'instance')),
-                const SizedBox(height: 10),
-                _SplitCodeInput(
-                  length: _codeLength,
-                  value: _code,
-                  onChanged: (v) => setState(() => _code = v),
-                  accent: accent, surface: surface, line: line, fg1: fg1, fg3: fg3,
-                ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Demande le code à la personne qui a créé l\'instance.',
-                    style: MdaType.caption(color: fg3),
-                  ),
-                ),
-              ],
-
-              // ── Create panel ───────────────────────────────────
-              if (_tab.index == (widget.hasSolo ? 1 : 2)) ...[
-                const SizedBox(height: 14),
-                _ModeChip(label: 'En ligne — serveur requis', icon: Icons.cloud_outlined,
-                    color: MdaColors.pigCobalt),
-                const SizedBox(height: 14),
-                Align(alignment: Alignment.centerLeft,
-                    child: MdaOverline('Nom de l\'instance · facultatif')),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _nameCtrl,
-                  style: MdaType.body(color: fg1),
-                  decoration: InputDecoration(
-                    hintText: 'Les copains de fac',
-                    hintStyle: MdaType.body(color: fg3)),
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-                const SizedBox(height: 8),
-                Text('Un code à partager sera généré automatiquement.',
-                    style: MdaType.caption(color: fg3)),
-              ],
-
-              // ── Pseudo (obligatoire) ────────────────────────────
-              const SizedBox(height: 20),
-              Align(alignment: Alignment.centerLeft, child: MdaOverline('Ton prénom ou pseudonyme')),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _pseudoCtrl,
-                style: MdaType.body(color: fg1),
-                decoration: InputDecoration(
-                  hintText: 'ex : Camille ou Vincent',
-                  hintStyle: MdaType.body(color: fg3),
-                  suffixIcon: _pseudoCtrl.text.trim().isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear, size: 18, color: fg3),
-                          onPressed: () { _pseudoCtrl.clear(); setState(() {}); },
-                        )
-                      : null,
-                ),
-                textCapitalization: TextCapitalization.words,
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 10),
-              // Artist name suggestion chips
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: _suggestions.map((name) => GestureDetector(
-                  onTap: () { _pseudoCtrl.text = name; setState(() {}); },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: surface, borderRadius: MdaRadius.bPill,
-                      border: Border.all(
-                        color: _pseudoCtrl.text == name ? accent : line,
-                        width: _pseudoCtrl.text == name ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Text(name, style: MdaType.bodySm(
-                      color: _pseudoCtrl.text == name ? accent : fg2)),
-                  ),
-                )).toList(),
-              ),
-
-              // ── CTA ────────────────────────────────────────────
-              const SizedBox(height: 28),
-              // Solo=0, Rejoindre=1, Créer=2  (hasSolo: Rejoindre=0, Créer=1)
-              MdaButton(
-                label: (!widget.hasSolo && _tab.index == 0)
-                    ? 'Jouer en solo'
-                    : _tab.index == (widget.hasSolo ? 0 : 1)
-                        ? 'Rejoindre l\'instance'
-                        : 'Créer une instance',
-                expand: true,
-                onPressed: (!widget.hasSolo && _tab.index == 0)
-                    ? (_canSolo ? _submit : null)
-                    : _tab.index == (widget.hasSolo ? 0 : 1)
-                        ? (_canJoin ? _submit : null)
-                        : (_canCreate ? _submit : null),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  static Artwork _stubArtwork() {
-    const cols = 14, rows = 18;
-    final contrib = ZoneContribution(
-      playerPseudo: '', playerAvatar: 'ochre', contributedAt: DateTime.now());
-    final zones = <String, Zone>{
-      'sky':   Zone(id: 'sky',   pigment: ZoneColor.fromLegacyPigment('cobalt'),   cellCount: 80, contribution: contrib),
-      'sun':   Zone(id: 'sun',   pigment: ZoneColor.fromLegacyPigment('saffron'),  cellCount: 10, contribution: contrib),
-      'halo':  Zone(id: 'halo',  pigment: ZoneColor.fromLegacyPigment('ochre'),    cellCount: 24, contribution: contrib),
-      'hills': Zone(id: 'hills', pigment: ZoneColor.fromLegacyPigment('viridian'), cellCount: 42, contribution: contrib),
-      'earth': Zone(id: 'earth', pigment: ZoneColor.fromLegacyPigment('sienna'),   cellCount: 96),
-    };
-    final cells = <MosaicCell>[];
-    int idx = 0;
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        final String z;
-        if (r < 9) {
-          final dx = c - 9.3, dy = (r - 3.4) * 1.15;
-          final d = (dx * dx + dy * dy).sqrt();
-          if (d < 2.1) z = 'sun';
-          else if (d < 3.3) z = 'halo';
-          else z = 'sky';
-        } else if (r < 13) {
-          z = 'hills';
-        } else {
-          z = 'earth';
-        }
-        cells.add(MosaicCell(index: idx++, col: c, row: r, zoneId: z));
-      }
-    }
-    return Artwork(id: 'stub', cols: cols, rows: rows, cells: cells, zones: zones);
-  }
-}
-
-class _SplitCodeInput extends StatefulWidget {
-  final int length;
-  final String value;
-  final ValueChanged<String> onChanged;
-  final Color accent, surface, line, fg1, fg3;
-
-  const _SplitCodeInput({
-    required this.length, required this.value, required this.onChanged,
-    required this.accent, required this.surface, required this.line,
-    required this.fg1, required this.fg3,
-  });
-
-  @override
-  State<_SplitCodeInput> createState() => _SplitCodeInputState();
-}
-
-class _SplitCodeInputState extends State<_SplitCodeInput> {
-  final _ctrl  = TextEditingController();
-  final _focus = FocusNode();
-
-  @override
-  void dispose() { _ctrl.dispose(); _focus.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _focus.requestFocus,
-      child: Stack(
-        children: [
-          Row(
-            children: List.generate(widget.length, (i) {
-              final ch     = i < widget.value.length ? widget.value[i] : null;
-              final active = i == widget.value.length;
-              return Expanded(
-                child: Container(
-                  margin: EdgeInsets.only(right: i < widget.length - 1 ? 9 : 0),
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: widget.surface,
-                    borderRadius: MdaRadius.bSm,
-                    border: Border.all(
-                      color: ch != null ? widget.accent : active ? widget.fg3 : widget.line,
-                      width: 1.5,
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    ch ?? '·',
-                    style: TextStyle(
-                      fontFamily: MdaFonts.serif, fontSize: 26,
-                      color: ch != null ? widget.fg1 : widget.fg3,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0,
-              child: TextField(
-                controller: _ctrl,
-                focusNode: _focus,
-                keyboardType: TextInputType.text,
-                textCapitalization: TextCapitalization.characters,
-                maxLength: widget.length,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
-                  _UpperCase(),
-                ],
-                onChanged: widget.onChanged,
-                decoration: const InputDecoration(counterText: ''),
+          ]),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: switch (step) {
+                  0 => _step0(t),
+                  1 => _step1(t),
+                  _ => _step2(t),
+                },
               ),
             ),
           ),
+          _footer(t),
+        ]),
+      ),
+    );
+  }
+
+  Widget _step0(L10n t) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const SizedBox(height: 4),
+      Center(
+        child: Column(children: [
+          Container(
+            width: 74,
+            height: 74,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: const LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [MdaColors.safran, MdaColors.clay500, MdaColors.cobalt]),
+              boxShadow: MdaShadows.md,
+            ),
+            child: const Center(child: MdaIcon('frame', size: 36, color: Colors.white)),
+          ),
+          const SizedBox(height: 12),
+          Text('Mémoire de l\'art', textAlign: TextAlign.center, style: MdaType.serif(size: 29, weight: FontWeight.w500, color: context.fg1)),
+          const SizedBox(height: 6),
+          Text(t.appTagline, textAlign: TextAlign.center, style: MdaType.serif(size: 15.5, italic: true, height: 1.3, color: context.fg2)),
+        ]),
+      ),
+      const SizedBox(height: 22),
+      // mystery teaser
+      ClipRRect(
+        borderRadius: MdaRadius.bLg,
+        child: Stack(children: [
+          ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
+            child: const MosaicWidget(filled: {'bleus', 'ors'}, pulse: false),
+          ),
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [context.paper.withValues(alpha: 0.20), context.paper.withValues(alpha: 0.55)],
+                ),
+              ),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                MdaIcon('lock', size: 20, color: context.fg1),
+                const SizedBox(height: 7),
+                Text(t.mysteryArtworkOfWeek, style: MdaType.serif(size: 17, italic: true, color: context.fg1)),
+                const SizedBox(height: 4),
+                Overline(t.revealedSunday, fontSize: 11),
+              ]),
+            ),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 24),
+      _AuthButton(provider: 'apple', label: t.continueWithApple, onTap: () => _provider(AuthProvider.apple)),
+      const SizedBox(height: 10),
+      _AuthButton(provider: 'google', label: t.continueWithGoogle, onTap: () => _provider(AuthProvider.google)),
+      const SizedBox(height: 8),
+      Text(t.accountSyncNote, textAlign: TextAlign.center, style: MdaType.sans(size: 12, height: 1.45, color: context.fg3)),
+      const SizedBox(height: 18),
+      // RGPD consent
+      GestureDetector(
+        onTap: () => setState(() => consent = !consent),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 22,
+            height: 22,
+            margin: const EdgeInsets.only(top: 1),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              color: consent ? context.accent : Colors.transparent,
+              border: Border.all(color: consent ? context.accent : context.lineStrong, width: 1.5),
+            ),
+            child: consent ? const Center(child: MdaIcon('check', size: 14, color: Colors.white, strokeWidth: 2.5)) : null,
+          ),
+          const SizedBox(width: 11),
+          Expanded(child: Text(t.consentText, style: MdaType.sans(size: 12.5, height: 1.45, color: context.fg2))),
+        ]),
+      ),
+      const SizedBox(height: 4),
+    ]);
+  }
+
+  Widget _step1(L10n t) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 12),
+      Overline(t.onbStep2),
+      const SizedBox(height: 8),
+      Text(t.onbWhatsYourName, style: MdaType.serif(size: 25, weight: FontWeight.w500, color: context.fg1)),
+      const SizedBox(height: 4),
+      Text(t.onbPseudoHint, style: MdaType.sans(size: 14, height: 1.4, color: context.fg2)),
+      const SizedBox(height: 22),
+      TextField(
+        controller: _pseudo,
+        autofocus: true,
+        style: MdaType.serif(size: 17, color: context.fg1),
+        decoration: const InputDecoration(hintText: 'Camille'),
+      ),
+    ]);
+  }
+
+  Widget _step2(L10n t) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 12),
+      Overline(t.onbStep3),
+      const SizedBox(height: 8),
+      Text(t.onbJoinOrCreate, style: MdaType.serif(size: 25, weight: FontWeight.w500, color: context.fg1)),
+      const SizedBox(height: 16),
+      _Segmented(
+        options: [('join', t.actionJoin), ('create', t.actionCreate)],
+        value: join,
+        onChanged: (v) => setState(() => join = v),
+      ),
+      const SizedBox(height: 18),
+      if (join == 'join') ..._joinBlock(t) else ..._createBlock(t),
+    ]);
+  }
+
+  List<Widget> _joinBlock(L10n t) {
+    return [
+      Row(children: [
+        _viaTab('code', t.viaCode, 'qr'),
+        const SizedBox(width: 8),
+        _viaTab('link', t.viaLink, 'link'),
+        const SizedBox(width: 8),
+        _viaTab('qr', t.viaQr, 'qr'),
+      ]),
+      const SizedBox(height: 16),
+      if (via == 'code') _CodeInput(controller: _code),
+      if (via == 'link')
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(color: context.surface, borderRadius: MdaRadius.bMd, border: Border.all(color: context.line)),
+          child: Row(children: [
+            MdaIcon('link', size: 18, color: context.fg3),
+            const SizedBox(width: 10),
+            Expanded(child: Text('memoire.art/i/ARL8-camille', overflow: TextOverflow.ellipsis, style: MdaType.sans(size: 14, color: context.fg2))),
+            MdaChip(t.onbOpen, onTap: () => _code.text = 'ARL8X7'),
+          ]),
+        ),
+      if (via == 'qr')
+        Center(
+          child: Column(children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: const BoxDecoration(color: Colors.white, borderRadius: MdaRadius.bLg, boxShadow: MdaShadows.md),
+              child: const MdaQr('ARL8-MDA', size: 150),
+            ),
+            const SizedBox(height: 12),
+            Text(t.onbScanQr, textAlign: TextAlign.center, style: MdaType.sans(size: 13, color: context.fg2)),
+          ]),
+        ),
+      const SizedBox(height: 16),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(color: context.surfaceSunk, borderRadius: MdaRadius.bMd),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          MdaIcon('info', size: 16, color: context.fg3),
+          const SizedBox(width: 9),
+          Expanded(child: Text(t.onbMidWeekNote, style: MdaType.sans(size: 12.5, height: 1.45, color: context.fg2))),
+        ]),
+      ),
+    ];
+  }
+
+  List<Widget> _createBlock(L10n t) {
+    return [
+      TextField(controller: _instName, decoration: InputDecoration(hintText: t.onbInstanceNamePlaceholder)),
+      const SizedBox(height: 16),
+      Overline(t.onbInstanceMode),
+      const SizedBox(height: 9),
+      _ModeCard(
+        mode: InstanceMode.shared,
+        desc: t.modeSharedDesc,
+        selected: mode == InstanceMode.shared,
+        onTap: () => setState(() => mode = InstanceMode.shared),
+      ),
+      const SizedBox(height: 9),
+      _ModeCard(
+        mode: InstanceMode.separate,
+        desc: t.modeSeparateDesc,
+        selected: mode == InstanceMode.separate,
+        onTap: () => setState(() => mode = InstanceMode.separate),
+      ),
+    ];
+  }
+
+  Widget _viaTab(String k, String label, String icon) {
+    final on = via == k;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => via = k),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+          decoration: BoxDecoration(
+            color: on ? MdaColors.clay100 : context.surface,
+            borderRadius: MdaRadius.bMd,
+            border: Border.all(color: on ? context.accent : context.line),
+          ),
+          child: Column(children: [
+            MdaIcon(icon, size: 18, color: on ? MdaColors.clay600 : context.fg2, strokeWidth: 1.8),
+            const SizedBox(height: 5),
+            Text(label, style: MdaType.sans(size: 12.5, weight: FontWeight.w600, color: on ? MdaColors.clay600 : context.fg2)),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _footer(L10n t) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 16, 28, 16),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (step == 0)
+          MdaButton(t.onbStart, full: true, disabled: !consent, onTap: consent ? () => setState(() => step = 1) : null),
+        if (step == 1) MdaButton(t.actionContinue, full: true, iconRight: 'right', onTap: () => setState(() => step = 2)),
+        if (step == 2) MdaButton(join == 'join' ? t.onbJoinInstance : t.onbCreateInstance, full: true, onTap: _finish),
+        if (step == 0) ...[
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () {
+              ref.read(authProvider.notifier).signInDev();
+              context.go('/today');
+            },
+            child: Text(t.devContinue, style: MdaType.sans(size: 13, weight: FontWeight.w600, color: context.fg3)),
+          ),
         ],
+        if (step > 0) ...[
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () => setState(() => step -= 1),
+            child: Text(t.actionBack, style: MdaType.sans(size: 13, weight: FontWeight.w600, color: context.fg3)),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
+class _AuthButton extends StatelessWidget {
+  final String provider;
+  final String label;
+  final VoidCallback onTap;
+  const _AuthButton({required this.provider, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isApple = provider == 'apple';
+    final bg = isApple ? context.fg1 : context.surface;
+    final fg = isApple ? context.paper : context.fg1;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: MdaRadius.bPill,
+          border: isApple ? null : Border.all(color: context.lineStrong),
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          MdaIcon(provider, size: 19, color: fg, strokeWidth: 1.6),
+          const SizedBox(width: 10),
+          Text(label, style: MdaType.sans(size: 15.5, weight: FontWeight.w600, color: fg)),
+        ]),
       ),
     );
   }
 }
 
-class _UpperCase extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(TextEditingValue _, TextEditingValue v) =>
-      v.copyWith(text: v.text.toUpperCase());
-}
-
-extension on double {
-  double sqrt() => (this <= 0) ? 0 : _sqrtIter(this);
-  static double _sqrtIter(double x) {
-    double r = x / 2;
-    for (int i = 0; i < 20; i++) r = (r + x / r) / 2;
-    return r;
-  }
-}
-
-// ── Mode indicator chip ───────────────────────────────────────────────────────
-
-class _ModeChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  const _ModeChip({required this.label, required this.icon, required this.color});
+class _Segmented extends StatelessWidget {
+  final List<(String, String)> options;
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _Segmented({required this.options, required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: context.surfaceSunk, borderRadius: MdaRadius.bPill),
+      child: Row(children: [
+        for (final o in options)
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(o.$1),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: value == o.$1 ? context.surface : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: value == o.$1 ? MdaShadows.sm : null,
+                ),
+                child: Text(o.$2,
+                    textAlign: TextAlign.center,
+                    style: MdaType.sans(size: 14, weight: FontWeight.w600, color: value == o.$1 ? context.fg1 : context.fg2)),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+class _ModeCard extends StatelessWidget {
+  final InstanceMode mode;
+  final String desc;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ModeCard({required this.mode, required this.desc, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final col = mode.isShared ? MdaColors.shared : MdaColors.separate;
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
         decoration: BoxDecoration(
-          color: color.withAlpha(0x1A),
-          borderRadius: MdaRadius.bPill,
-          border: Border.all(color: color.withAlpha(0x40)),
+          color: context.surface,
+          borderRadius: MdaRadius.bMd,
+          border: Border.all(color: selected ? col : context.line, width: 1.5),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 5),
-            Text(label,
-              style: TextStyle(
-                fontFamily: MdaFonts.sans,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              )),
-          ],
-        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            InstanceBadge(mode: mode, big: true),
+            if (selected) MdaIcon('checkCircle', size: 18, color: col),
+          ]),
+          const SizedBox(height: 6),
+          Text(desc, style: MdaType.sans(size: 12.5, height: 1.4, color: context.fg2)),
+        ]),
       ),
+    );
+  }
+}
+
+class _CodeInput extends StatefulWidget {
+  final TextEditingController controller;
+  const _CodeInput({required this.controller});
+  @override
+  State<_CodeInput> createState() => _CodeInputState();
+}
+
+class _CodeInputState extends State<_CodeInput> {
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final clean = widget.controller.text.toUpperCase().replaceAll(RegExp('[^A-Z0-9]'), '');
+    return GestureDetector(
+      onTap: () => _focus.requestFocus(),
+      child: Stack(children: [
+        Row(children: [
+          for (var i = 0; i < 6; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(
+              child: AspectRatio(
+                aspectRatio: 0.82,
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: context.surface,
+                    borderRadius: MdaRadius.bSm,
+                    border: Border.all(
+                      color: i < clean.length ? context.accent : (i == clean.length ? context.lineStrong : context.line),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(i < clean.length ? clean[i] : '·',
+                      style: MdaType.serif(size: 25, color: i < clean.length ? context.fg1 : context.fg3)),
+                ),
+              ),
+            ),
+          ],
+        ]),
+        Positioned.fill(
+          child: Opacity(
+            opacity: 0,
+            child: TextField(
+              controller: widget.controller,
+              focusNode: _focus,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 6,
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 }

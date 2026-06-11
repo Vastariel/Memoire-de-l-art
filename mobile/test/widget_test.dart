@@ -1,30 +1,26 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Smoke test du moteur d'œuvre v2.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:memoire_de_lart/main.dart';
+import 'package:memoire_de_lart/engine/mosaic_engine.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  test('buildSemeur produit une grille 12x16 (192 cellules)', () {
+    expect(kArtwork.cols, 12);
+    expect(kArtwork.rows, 16);
+    expect(kArtwork.cells.length, 192);
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  test('chaque cellule a une famille et une variante connues', () {
+    for (final c in kArtwork.cells) {
+      expect(kFamilies.containsKey(c.family), isTrue);
+      expect(kVariants.containsKey(c.variant), isTrue);
+      expect(kVariants[c.variant]!.family, c.family);
+    }
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  test('7 familles, une par jour lun→dim', () {
+    expect(kFamilies.length, 7);
+    final days = kFamilies.values.map((f) => f.day).toSet();
+    expect(days, {1, 2, 3, 4, 5, 6, 7});
   });
 }

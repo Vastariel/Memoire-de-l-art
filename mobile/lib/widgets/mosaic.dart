@@ -1,372 +1,235 @@
-import 'dart:io';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
-import '../models/artwork.dart';
-import '../models/zone.dart';
-import '../theme/colors.dart';
-import '../theme/theme.dart';
+// mosaic.dart — rendu de l'œuvre v2 (port du composant Mosaic de mosaic.jsx).
+// Vue plate (pigments) ↔ vitrail (photos brutes recadrées), pulse du jour,
+// reveal en cascade. CustomPainter pour tenir 192 cellules sans peiner.
 
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import '../engine/mosaic_engine.dart';
+import '../theme/palette.dart';
 
 class MosaicWidget extends StatefulWidget {
-  final Artwork artwork;
-  final String? revealZoneId;   // triggers staggered cell-reveal animation
-  final bool revealAll;         // end-of-month: reveal with full stagger
-  final bool showPulse;             // pulse today's zone
-  final double photoRevealFactor;   // 0.0 = gradient only, 1.0 = full photos
+  final Set<String> filled; // familles contribuées
+  final String? todayFamily;
+  final double vitrail; // 0 = plat, 1 = vitrail
+  final bool revealAll;
   final double gap;
   final double radius;
-  final void Function(Zone zone)? onTapZone;
+  final bool pulse;
+  final bool stagger;
+  final void Function(ArtCell cell, bool filled)? onTapCell;
 
   const MosaicWidget({
     super.key,
-    required this.artwork,
-    this.revealZoneId,
+    required this.filled,
+    this.todayFamily,
+    this.vitrail = 0,
     this.revealAll = false,
-    this.showPulse = true,
-    this.photoRevealFactor = 0.0,
-    this.gap = 3,
-    this.radius = 4,
-    this.onTapZone,
+    this.gap = 1.5,
+    this.radius = 2,
+    this.pulse = true,
+    this.stagger = false,
+    this.onTapCell,
   });
 
   @override
   State<MosaicWidget> createState() => _MosaicWidgetState();
 }
 
-class _MosaicWidgetState extends State<MosaicWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseCtrl;
-  // track which cells have been "played in" for stagger
-  late Set<int> _played;
+class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMixin {
+  late final AnimationController _pulse;
+  late final AnimationController _stagger;
 
   @override
   void initState() {
     super.initState();
-    _played = {};
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-
-    if (widget.revealZoneId != null || widget.revealAll) {
-      _scheduleReveal();
+    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1900))..repeat(reverse: true);
+    _stagger = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+    if (widget.stagger) {
+      _stagger.forward();
+    } else {
+      _stagger.value = 1;
     }
   }
 
   @override
   void didUpdateWidget(covariant MosaicWidget old) {
     super.didUpdateWidget(old);
-    if (widget.revealZoneId != old.revealZoneId ||
-        widget.revealAll != old.revealAll) {
-      _played.clear();
-      _scheduleReveal();
+    if (widget.stagger && !old.stagger) {
+      _stagger
+        ..reset()
+        ..forward();
+    } else if (!widget.stagger && old.stagger) {
+      _stagger.value = 1;
     }
-  }
-
-  void _scheduleReveal() {
-    // tiny delay so the widget has been laid out before animating
-    Future.delayed(const Duration(milliseconds: 60), () {
-      if (mounted) setState(() => _played = _indexesToReveal());
-    });
-  }
-
-  Set<int> _indexesToReveal() {
-    if (widget.revealAll) {
-      return widget.artwork.cells.map((c) => c.index).toSet();
-    }
-    if (widget.revealZoneId != null) {
-      return widget.artwork.cells
-          .where((c) => c.zoneId == widget.revealZoneId)
-          .map((c) => c.index)
-          .toSet();
-    }
-    return {};
   }
 
   @override
   void dispose() {
-    _pulseCtrl.dispose();
+    _pulse.dispose();
+    _stagger.dispose();
     super.dispose();
+  }
+
+  void _handleTap(Offset local, Size size) {
+    if (widget.onTapCell == null) return;
+    final col = (local.dx / size.width * kCols).floor().clamp(0, kCols - 1);
+    final row = (local.dy / size.height * kRows).floor().clamp(0, kRows - 1);
+    final cell = kArtwork.cells[row * kCols + col];
+    final isFilled = widget.revealAll || widget.filled.contains(cell.family);
+    widget.onTapCell!(cell, isFilled);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final emptyColor = isDark ? MdaDark.mosaicEmpty : MdaLight.mosaicEmpty;
-
-    final a = widget.artwork;
     return AspectRatio(
-      aspectRatio: a.cols / a.rows,
-      child: LayoutBuilder(builder: (_, constraints) {
-        // Cap gap at 12% of cell width so it doesn't dominate for fine grids
-        final rawCellW = constraints.maxWidth / a.cols;
-        final effectiveGap = (rawCellW * 0.12).clamp(0.3, widget.gap);
-        final cellW = (constraints.maxWidth - effectiveGap * (a.cols - 1)) / a.cols;
-        return Wrap(
-          spacing: effectiveGap,
-          runSpacing: effectiveGap,
-          children: a.cells.map((cell) {
-            final zone = a.zoneForCell(cell);
-            return _MosaicCell(
-              key: ValueKey(cell.index),
-              cell: cell,
-              zone: zone,
-              size: cellW,
+      aspectRatio: kCols / kRows,
+      child: LayoutBuilder(builder: (context, c) {
+        final size = Size(c.maxWidth, c.maxHeight);
+        Widget art = AnimatedBuilder(
+          animation: Listenable.merge([_pulse, _stagger]),
+          builder: (_, __) => CustomPaint(
+            size: size,
+            painter: _MosaicPainter(
+              filled: widget.filled,
+              todayFamily: widget.todayFamily,
+              vitrail: widget.vitrail,
+              revealAll: widget.revealAll,
+              gap: widget.gap,
               radius: widget.radius,
-              emptyColor: emptyColor,
-              played: _played.contains(cell.index),
-              staggerDelay: _staggerDelay(cell, a),
-              pulseAnim: _pulseCtrl,
-              showPulse: widget.showPulse,
-              photoRevealFactor: widget.photoRevealFactor,
-              onTap: widget.onTapZone != null && zone != null
-                  ? () => widget.onTapZone!(zone)
-                  : null,
-            );
-          }).toList(),
+              pulse: widget.pulse,
+              pulseT: _pulse.value,
+              staggerT: widget.stagger ? _stagger.value : 1,
+              emptyColor: context.mosaicEmpty,
+              lineColor: context.line,
+            ),
+          ),
         );
+        if (widget.onTapCell != null) {
+          art = GestureDetector(
+            onTapUp: (d) => _handleTap(d.localPosition, size),
+            child: art,
+          );
+        }
+        return art;
       }),
     );
   }
+}
 
-  Duration _staggerDelay(MosaicCell cell, Artwork a) {
-    if (widget.revealAll) {
-      return Duration(milliseconds: (cell.index * 14).clamp(0, 1200));
+double _easeOut(double t) => 1 - math.pow(1 - t, 3).toDouble();
+
+class _MosaicPainter extends CustomPainter {
+  final Set<String> filled;
+  final String? todayFamily;
+  final double vitrail;
+  final bool revealAll;
+  final double gap;
+  final double radius;
+  final bool pulse;
+  final double pulseT;
+  final double staggerT;
+  final Color emptyColor;
+  final Color lineColor;
+
+  _MosaicPainter({
+    required this.filled,
+    required this.todayFamily,
+    required this.vitrail,
+    required this.revealAll,
+    required this.gap,
+    required this.radius,
+    required this.pulse,
+    required this.pulseT,
+    required this.staggerT,
+    required this.emptyColor,
+    required this.lineColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cellW = (size.width - gap * (kCols - 1)) / kCols;
+    final cellH = (size.height - gap * (kRows - 1)) / kRows;
+    final total = kArtwork.cells.length;
+
+    Rect cellRect(ArtCell c) => Rect.fromLTWH(c.col * (cellW + gap), c.row * (cellH + gap), cellW, cellH);
+
+    final emptyPaint = Paint()..color = emptyColor;
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5
+      ..color = lineColor;
+
+    // ── couche plate + vides + jour ──
+    for (final c in kArtwork.cells) {
+      final r = cellRect(c);
+      final rr = RRect.fromRectAndRadius(r, Radius.circular(radius));
+      final isFilled = revealAll || filled.contains(c.family);
+      final isToday = !isFilled && c.family == todayFamily;
+
+      // fond vide pour tout le monde (base)
+      canvas.drawRRect(rr, emptyPaint);
+      canvas.drawRRect(rr, borderPaint);
+
+      if (isFilled) {
+        var cellT = 1.0;
+        if (staggerT < 1) {
+          final start = (c.i / total) * 0.55;
+          cellT = _easeOut(((staggerT - start) / 0.45).clamp(0, 1));
+        }
+        if (cellT <= 0) continue;
+        final fr = Rect.fromCenter(center: r.center, width: r.width * cellT, height: r.height * cellT);
+        final frr = RRect.fromRectAndRadius(fr, Radius.circular(radius * cellT));
+        final paint = Paint()..shader = fillGradient(c.pig, c.i).createShader(fr);
+        canvas.drawRRect(frr, paint);
+      } else if (isToday) {
+        final a = pulse ? (0.55 + 0.45 * pulseT) : 1.0;
+        canvas.drawRRect(rr, Paint()..color = c.pig.withValues(alpha: 0.18 * a));
+        canvas.drawRRect(
+          rr,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.25
+            ..color = c.pig.withValues(alpha: a),
+        );
+      }
     }
-    if (widget.revealZoneId != null && cell.zoneId == widget.revealZoneId) {
-      // count position within zone
-      int zoneIdx = 0;
-      for (final c in a.cells) {
-        if (c.zoneId == widget.revealZoneId) {
-          if (c.index == cell.index) break;
-          zoneIdx++;
+
+    // ── couche vitrail (photos) ──
+    if (vitrail > 0.01) {
+      final full = Offset.zero & size;
+      canvas.saveLayer(full, Paint()..color = Colors.white.withValues(alpha: vitrail.clamp(0, 1)));
+      final shaders = <String, List<Shader>>{};
+      for (final c in kArtwork.cells) {
+        final isFilled = revealAll || filled.contains(c.family);
+        if (!isFilled) continue;
+        final layers = shaders.putIfAbsent(
+          c.family,
+          () => photoLayers(c.family).map((g) => g.createShader(full)).toList(),
+        );
+        final r = cellRect(c);
+        final rr = RRect.fromRectAndRadius(r, Radius.circular(radius));
+        for (final sh in layers) {
+          canvas.drawRRect(rr, Paint()..shader = sh);
         }
       }
-      return Duration(milliseconds: (zoneIdx * 45).clamp(0, 1500));
+      canvas.restore();
     }
-    return Duration.zero;
   }
+
+  @override
+  bool shouldRepaint(_MosaicPainter old) =>
+      old.vitrail != vitrail ||
+      old.pulseT != pulseT ||
+      old.staggerT != staggerT ||
+      old.todayFamily != todayFamily ||
+      !_setEq(old.filled, filled) ||
+      old.revealAll != revealAll;
 }
 
-class _MosaicCell extends StatefulWidget {
-  final MosaicCell cell;
-  final Zone? zone;
-  final double size;
-  final double radius;
-  final Color emptyColor;
-  final bool played;
-  final Duration staggerDelay;
-  final AnimationController pulseAnim;
-  final bool showPulse;
-  final double photoRevealFactor;
-  final VoidCallback? onTap;
-
-  const _MosaicCell({
-    super.key,
-    required this.cell,
-    required this.zone,
-    required this.size,
-    required this.radius,
-    required this.emptyColor,
-    required this.played,
-    required this.staggerDelay,
-    required this.pulseAnim,
-    required this.showPulse,
-    required this.photoRevealFactor,
-    this.onTap,
-  });
-
-  @override
-  State<_MosaicCell> createState() => _MosaicCellState();
-}
-
-class _MosaicCellState extends State<_MosaicCell>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _revealCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _revealCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    if (widget.played) {
-      // Triggered reveal — animate in with stagger
-      Future.delayed(widget.staggerDelay, () {
-        if (mounted) _revealCtrl.forward();
-      });
-    } else {
-      // Already filled and not being animated — show immediately at full opacity
-      _revealCtrl.value = 1.0;
-    }
+bool _setEq(Set<String> a, Set<String> b) {
+  if (a.length != b.length) return false;
+  for (final e in a) {
+    if (!b.contains(e)) return false;
   }
-
-  @override
-  void didUpdateWidget(covariant _MosaicCell old) {
-    super.didUpdateWidget(old);
-    if (widget.played && !old.played) {
-      _revealCtrl.reset();
-      Future.delayed(widget.staggerDelay, () {
-        if (mounted) _revealCtrl.forward();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _revealCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final zone = widget.zone;
-    final isFilled = zone?.isFilled ?? false;
-    final isToday  = zone?.isToday ?? false;
-    final pigColor = zone?.pigment.color ?? widget.emptyColor;
-
-    Widget child;
-
-    if (isFilled) {
-      final photoUrl = zone?.contribution?.photoUrl;
-      final hasPhoto = photoUrl != null && photoUrl.isNotEmpty
-          && widget.photoRevealFactor > 0;
-
-      child = AnimatedBuilder(
-        animation: _revealCtrl,
-        builder: (_, __) {
-          final t = CurvedAnimation(parent: _revealCtrl, curve: MdaCurve.easeOut).value;
-
-          // Flat solid colour — clean look on full mosaic view (no gradient)
-          final flatCell = Container(
-            width: widget.size, height: widget.size,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(widget.radius),
-              color: pigColor,
-            ),
-          );
-
-          final flatOpacity = t * (1.0 - widget.photoRevealFactor * 0.8);
-          Widget base = Opacity(
-            opacity: flatOpacity,
-            child: Transform.scale(scale: 0.55 + 0.45 * t, child: flatCell),
-          );
-
-          if (!hasPhoto) return base;
-
-          // Photo fades in as zoom increases; vignette adds depth when zoomed
-          return Stack(
-            children: [
-              base,
-              Opacity(
-                opacity: widget.photoRevealFactor.clamp(0.0, 1.0),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(widget.radius),
-                  child: Stack(
-                    children: [
-                      _PhotoImage(
-                        url: photoUrl, size: widget.size,
-                        radius: widget.radius, fallback: flatCell),
-                      // Radial vignette visible only when photos are revealed
-                      if (widget.photoRevealFactor > 0.2)
-                        Positioned.fill(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(widget.radius),
-                              gradient: RadialGradient(
-                                colors: [
-                                  Colors.transparent,
-                                  Colors.black.withAlpha(
-                                    (0x55 * widget.photoRevealFactor).round()),
-                                ],
-                                stops: const [0.45, 1.0],
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-    } else if (isToday) {
-      child = AnimatedBuilder(
-        animation: widget.pulseAnim,
-        builder: (_, __) {
-          final opacity = widget.showPulse
-              ? 0.55 + 0.45 * widget.pulseAnim.value
-              : 1.0;
-          return Opacity(
-            opacity: opacity,
-            child: Container(
-              width: widget.size,
-              height: widget.size,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(widget.radius),
-                color: pigColor.withAlpha(0x33),
-                border: Border.all(color: pigColor, width: 1.5),
-              ),
-            ),
-          );
-        },
-      );
-    } else {
-      child = Container(
-        width: widget.size,
-        height: widget.size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(widget.radius),
-          color: widget.emptyColor,
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline,
-          ),
-        ),
-      );
-    }
-
-    if (widget.onTap != null) {
-      return GestureDetector(onTap: widget.onTap, child: child);
-    }
-    return child;
-  }
-}
-
-// ── Photo image (network or local file) ───────────────────────────────────────
-
-class _PhotoImage extends StatelessWidget {
-  final String url;
-  final double size;
-  final double radius;
-  final Widget fallback;
-
-  const _PhotoImage({
-    required this.url,
-    required this.size,
-    required this.radius,
-    required this.fallback,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Local file path
-    if (!url.startsWith('http')) {
-      return Image.file(
-        File(url),
-        width: size, height: size, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => fallback,
-      );
-    }
-    // Remote URL
-    return CachedNetworkImage(
-      imageUrl: url,
-      width: size, height: size, fit: BoxFit.cover,
-      fadeInDuration: const Duration(milliseconds: 300),
-      placeholder: (_, __) => fallback,
-      errorWidget: (_, __, ___) => fallback,
-    );
-  }
+  return true;
 }

@@ -1,215 +1,128 @@
-import 'dart:typed_data';
-import 'dart:ui' as ui;
-import 'dart:io';
-import 'package:cached_network_image/cached_network_image.dart';
+// reveal_screen.dart — Reveal du dimanche : stagger → vitrail → cartel.
+
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import '../../models/artwork.dart';
-import '../../models/instance.dart';
-import '../../theme/colors.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../engine/mosaic_engine.dart';
+import '../../l10n/app_localizations.dart';
+import '../../providers/game_provider.dart';
 import '../../theme/theme.dart';
 import '../../theme/typography.dart';
-import '../../widgets/mda_button.dart';
+import '../../widgets/mda_icon.dart';
 import '../../widgets/mosaic.dart';
-import '../../widgets/overline.dart';
+import '../../widgets/primitives.dart';
 
-class RevealScreen extends StatefulWidget {
-  final Artwork artwork;
-  final VoidCallback onShare;
-  final VoidCallback onContinue;
-
-  const RevealScreen({super.key, required this.artwork, required this.onShare, required this.onContinue});
-
+class RevealScreen extends ConsumerStatefulWidget {
+  const RevealScreen({super.key});
   @override
-  State<RevealScreen> createState() => _RevealScreenState();
+  ConsumerState<RevealScreen> createState() => _RevealScreenState();
 }
 
-class _RevealScreenState extends State<RevealScreen> with TickerProviderStateMixin {
-  // Phase 0: mosaic stagger reveal
-  // Phase 1: wall label appears
-  // Phase 2 (if hdUrl): crossfade to HD photo
-  int   _phase   = 0;
-  bool  _sharing = false;
-  final _mosaicKey = GlobalKey();
-
-  late final AnimationController _hdCtrl = AnimationController(
-    vsync: this, duration: const Duration(milliseconds: 2500));
-  late final Animation<double> _hdFade = CurvedAnimation(parent: _hdCtrl, curve: Curves.easeInOut);
+class _RevealScreenState extends ConsumerState<RevealScreen> {
+  int _phase = 0; // 0 build → 1 vitrail → 2 cartel
 
   @override
   void initState() {
     super.initState();
-    // Phase 1: wall label after stagger
-    Future.delayed(const Duration(milliseconds: 2200), () {
+    Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) setState(() => _phase = 1);
     });
-    // Phase 2: HD reveal after label appears (only if hdUrl exists)
-    if (widget.artwork.hdUrl != null) {
-      Future.delayed(const Duration(milliseconds: 4500), () {
-        if (mounted) { setState(() => _phase = 2); _hdCtrl.forward(); }
-      });
-    }
-  }
-
-  @override
-  void dispose() { _hdCtrl.dispose(); super.dispose(); }
-
-  Future<void> _share() async {
-    if (_sharing) return;
-    setState(() => _sharing = true);
-    try {
-      final bytes = await _captureMosaic();
-      if (bytes == null) { widget.onShare(); return; }
-      final dir  = await getTemporaryDirectory();
-      final file = File('${dir.path}/mda_mosaic.png');
-      await file.writeAsBytes(bytes);
-      final a    = widget.artwork;
-      final text = a.title != null
-          ? '${a.title}${a.artist != null ? ' · ${a.artist}' : ''}\nMémoire de l\'art'
-          : 'Notre œuvre du mois — Mémoire de l\'art';
-      await Share.shareXFiles([XFile(file.path, mimeType: 'image/png')], text: text);
-      widget.onShare();
-    } catch (_) { widget.onShare(); }
-    finally { if (mounted) setState(() => _sharing = false); }
-  }
-
-  Future<Uint8List?> _captureMosaic() async {
-    final boundary = _mosaicKey.currentContext
-        ?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) return null;
-    final image    = await boundary.toImage(pixelRatio: 2.0);
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData?.buffer.asUint8List();
+    Future.delayed(const Duration(milliseconds: 2100), () {
+      if (mounted) setState(() => _phase = 2);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final paper  = isDark ? MdaDark.paper : MdaLight.paper;
-    final fg1    = isDark ? MdaDark.fg1   : MdaLight.fg1;
-    final fg2    = isDark ? MdaDark.fg2   : MdaLight.fg2;
-    final line   = isDark ? MdaDark.line  : MdaLight.line;
-    final a      = widget.artwork;
+    final t = L10n.of(context);
+    final g = ref.watch(gameProvider);
+    final all = kFamilies.keys.toSet();
 
     return Scaffold(
-      backgroundColor: paper,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-            const Center(child: MdaOverline('Fin du mois · L\'œuvre est complète')),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF1C1813), Color(0xFF2A2017)]),
+        ),
+        child: SafeArea(
+          child: Column(children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: IconTapButton('x', color: Colors.white70, onTap: () => context.pop()),
+            ),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(22, 18, 22, 32),
-                child: Column(
-                  children: [
-                    // ── Mosaic / HD stack ─────────────────────────
-                    RepaintBoundary(
-                      key: _mosaicKey,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(26, 4, 26, 0),
+                  child: Column(children: [
+                    Overline(t.revealOverline(g.week), color: Colors.white.withValues(alpha: 0.55)),
+                    const SizedBox(height: 8),
+                    Text(t.artworkRevealed, textAlign: TextAlign.center, style: MdaType.serif(size: 26, weight: FontWeight.w500, color: Colors.white)),
+                    const SizedBox(height: 20),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 300),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: paper, borderRadius: MdaRadius.bMd,
-                          border: Border.all(color: line), boxShadow: MdaShadows.lg,
+                          borderRadius: MdaRadius.bLg,
+                          border: Border.all(color: const Color(0xFF0E0B07), width: 6),
+                          boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 70, offset: Offset(0, 30))],
                         ),
-                        clipBehavior: Clip.hardEdge,
-                        child: Stack(
-                          children: [
-                            // Always present: staggered mosaic reveal
-                            MosaicWidget(
-                              artwork: a, revealAll: true,
-                              showPulse: false, gap: 2, radius: 2.5,
-                            ),
-                            // HD photo fades over the mosaic
-                            if (a.hdUrl != null)
-                              FadeTransition(
-                                opacity: _hdFade,
-                                child: CachedNetworkImage(
-                                  imageUrl: a.hdUrl!,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  placeholder: (_, __) => const SizedBox.shrink(),
-                                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // ── HD label ──────────────────────────────────
-                    if (_phase >= 2 && a.hdUrl != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.hd_rounded, size: 16, color: fg2),
-                            const SizedBox(width: 6),
-                            Text('Vue originale', style: MdaType.caption(color: fg2)),
-                          ],
-                        ),
-                      ),
-
-                    // ── Wall label ────────────────────────────────
-                    AnimatedOpacity(
-                      opacity: _phase >= 1 ? 1.0 : 0.0,
-                      duration: MdaDuration.slow, curve: MdaCurve.easeOut,
-                      child: AnimatedSlide(
-                        offset: _phase >= 1 ? Offset.zero : const Offset(0, 0.08),
-                        duration: MdaDuration.slow, curve: MdaCurve.easeOut,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 28),
-                          child: Column(
-                            children: [
-                              if (a.title != null)
-                                Text(a.title!,
-                                  style: MdaType.display(color: fg1).copyWith(
-                                    fontStyle: FontStyle.italic,
-                                    fontWeight: FontWeight.w500, fontSize: 28),
-                                  textAlign: TextAlign.center),
-                              if (a.artist != null) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  '${a.artist}${a.year != 0 ? ' — ${a.year}' : ''}',
-                                  style: MdaType.serifItalic(color: fg2).copyWith(fontSize: 16),
-                                  textAlign: TextAlign.center),
-                              ],
-                              if (a.description != null) ...[
-                                const SizedBox(height: 16),
-                                Text(a.description!,
-                                  style: MdaType.bodySm(color: fg2).copyWith(height: 1.6),
-                                  textAlign: TextAlign.center),
-                              ],
-                              const SizedBox(height: 28),
-                              MdaButton(
-                                label: _sharing ? 'Partage en cours…' : 'Partager l\'œuvre',
-                                icon: Icons.share_outlined,
-                                onPressed: _sharing ? null : _share),
-                              const SizedBox(height: 12),
-                              MdaButton(
-                                label: 'Retour',
-                                variant: MdaButtonVariant.ghost,
-                                onPressed: widget.onContinue),
-                            ],
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: MosaicWidget(
+                            filled: all,
+                            revealAll: true,
+                            vitrail: _phase >= 1 ? 1 : 0,
+                            stagger: _phase == 0,
+                            pulse: false,
+                            gap: 1,
                           ),
                         ),
                       ),
                     ),
-                  ],
+                    const SizedBox(height: 22),
+                    AnimatedOpacity(
+                      opacity: _phase >= 2 ? 1 : 0,
+                      duration: const Duration(milliseconds: 500),
+                      child: Column(children: [
+                        Text('Le Semeur au soleil couchant', textAlign: TextAlign.center,
+                            style: MdaType.serif(size: 23, italic: true, color: Colors.white)),
+                        const SizedBox(height: 6),
+                        Text('Vincent van Gogh · 1888 · Kröller-Müller Museum',
+                            textAlign: TextAlign.center, style: MdaType.sans(size: 13.5, color: Colors.white.withValues(alpha: 0.7))),
+                        if (g.bet != null) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+                            decoration: BoxDecoration(color: const Color(0x383F8E5C), borderRadius: BorderRadius.circular(999)),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              const MdaIcon('checkCircle', size: 15, color: Color(0xFF8FD3A6)),
+                              const SizedBox(width: 7),
+                              Text('${t.betWon} · +150 pts',
+                                  style: MdaType.sans(size: 13, weight: FontWeight.w700, color: const Color(0xFF8FD3A6))),
+                            ]),
+                          ),
+                        ],
+                      ]),
+                    ),
+                  ]),
                 ),
               ),
             ),
-          ],
+            AnimatedOpacity(
+              opacity: _phase >= 2 ? 1 : 0,
+              duration: const Duration(milliseconds: 500),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(26, 8, 26, 16),
+                child: Column(children: [
+                  MdaButton(t.shareCard, full: true, variant: MdaBtnVariant.dark, icon: 'share', onTap: () {}),
+                  const SizedBox(height: 10),
+                  MdaButton(t.addToCollection, full: true, variant: MdaBtnVariant.ghost, textColor: Colors.white, onTap: () => context.go('/collection')),
+                ]),
+              ),
+            ),
+          ]),
         ),
       ),
     );
   }
-}
-
-// Helper: should the reveal screen be shown?
-bool shouldReveal(Artwork artwork, Instance instance) {
-  final allFilled = artwork.zones.values.every((z) => z.isFilled);
-  return allFilled || instance.isMonthComplete;
 }
