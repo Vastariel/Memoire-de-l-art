@@ -1,15 +1,17 @@
-// camera_screen.dart — viseur (simulé Phase 1) avec HUD teinte cible.
-// Le vrai flux caméra (camera + color_analyzer) se branchera ici en Phase 2 ;
-// le design lui-même simule la prise et le score de matching.
+// camera_screen.dart — viseur v2 : vraie caméra + feedback couleur temps réel
+// (camera + color_analyzer), avec repli simulé si aucun capteur (desktop/web).
 
 import 'dart:math' as math;
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../engine/mosaic_engine.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/camera_provider.dart';
 import '../../providers/game_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../services/color_analyzer.dart';
 import '../../theme/typography.dart';
 import '../../widgets/game_widgets.dart';
 import '../../widgets/mda_icon.dart';
@@ -22,16 +24,54 @@ class CameraScreen extends ConsumerStatefulWidget {
 
 class _CameraScreenState extends ConsumerState<CameraScreen> {
   bool _shot = false;
+  bool _streaming = false;
+  CameraController? _ctrl;
 
-  void _shoot() {
+  void _ensureStream(CameraController ctrl, Color target) {
+    if (_streaming) return;
+    _streaming = true;
+    _ctrl = ctrl;
+    ctrl.startImageStream((img) {
+      if (mounted) ref.read(liveColorProvider(target).notifier).onFrame(img);
+    });
+  }
+
+  Future<void> _stopStream() async {
+    if (_streaming && _ctrl != null && _ctrl!.value.isStreamingImages) {
+      try {
+        await _ctrl!.stopImageStream();
+      } catch (_) {}
+    }
+    _streaming = false;
+  }
+
+  Future<void> _capture(Color target, {CameraController? real}) async {
     if (_shot) return;
+    int score;
+    if (real != null) {
+      await _stopStream();
+      try {
+        final res = await capturePhoto(real, target);
+        score = res.score;
+      } catch (_) {
+        score = 72 + math.Random().nextInt(22);
+      }
+    } else {
+      score = 72 + math.Random().nextInt(22);
+    }
+    if (!mounted) return;
     setState(() => _shot = true);
-    Future.delayed(const Duration(milliseconds: 1050), () {
+    Future.delayed(const Duration(milliseconds: 650), () {
       if (!mounted) return;
-      final score = 72 + math.Random().nextInt(22);
       ref.read(gameProvider.notifier).captureDone(score);
       context.pushReplacement('/confirm');
     });
+  }
+
+  @override
+  void dispose() {
+    _stopStream();
+    super.dispose();
   }
 
   @override
@@ -41,17 +81,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
     final g = ref.watch(gameProvider);
     final task = g.currentTask;
     final v = kVariants[task?.variant ?? g.myVariant]!;
-    final layers = photoLayers(v.family);
+    final target = v.color;
+
+    final camsAsync = ref.watch(availableCamerasProvider);
+    final hasCamera = camsAsync.maybeWhen(data: (c) => c.isNotEmpty, orElse: () => false);
 
     return Scaffold(
       backgroundColor: const Color(0xFF15110C),
       body: Stack(children: [
-        // viseur simulé : fond « photo » de la famille
-        Positioned.fill(
-          child: Stack(children: [
-            for (final gr in layers) DecoratedBox(decoration: BoxDecoration(gradient: gr), child: const SizedBox.expand()),
-          ]),
-        ),
+        // fond : vraie caméra ou viseur simulé
+        Positioned.fill(child: hasCamera ? _realPreview(target) : _simulated(v.family)),
         const Positioned.fill(
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -74,34 +113,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                 InstanceBadge(mode: task?.kind ?? g.activeInstance.mode, big: true),
               ]),
               const SizedBox(height: 24),
-              // cible teinte
-              Container(
-                padding: const EdgeInsets.fromLTRB(9, 9, 16, 9),
-                decoration: BoxDecoration(color: const Color(0x66000000), borderRadius: BorderRadius.circular(999)),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: v.color,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
-                    ),
-                  ),
-                  const SizedBox(width: 11),
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Text(t.camTarget.toUpperCase(),
-                        style: MdaType.sans(size: 10.5, weight: FontWeight.w600, letterSpacing: 1.2, color: Colors.white70)),
-                    Text(v.name(lang), style: MdaType.serif(size: 18, height: 1, color: Colors.white)),
-                  ]),
-                ]),
-              ),
+              _targetChip(t, v, lang),
               const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(color: const Color(0x4D000000), borderRadius: BorderRadius.circular(999)),
-                child: Text(t.camFrameSomething, style: MdaType.sans(size: 13, color: Colors.white.withValues(alpha: 0.85))),
-              ),
+              _liveHint(t, target, hasCamera),
             ]),
           ),
         ),
@@ -116,8 +130,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
             ),
           ),
         ),
-        if (_shot)
-          Positioned.fill(child: Container(color: Colors.white.withValues(alpha: 0.9))),
+        if (_shot) Positioned.fill(child: Container(color: Colors.white.withValues(alpha: 0.9))),
         // shutter
         Positioned(
           left: 0,
@@ -127,7 +140,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
             _RoundBtn(icon: 'image', onTap: () {}, size: 46),
             const SizedBox(width: 34),
             GestureDetector(
-              onTap: _shoot,
+              onTap: () => _capture(target, real: hasCamera ? _ctrl : null),
               child: Container(
                 width: 78,
                 height: 78,
@@ -141,10 +154,89 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
               ),
             ),
             const SizedBox(width: 34),
-            _RoundBtn(icon: 'refresh', onTap: () {}, size: 46),
+            _RoundBtn(
+              icon: 'refresh',
+              size: 46,
+              onTap: () {
+                final cur = ref.read(lensDirectionProvider);
+                ref.read(lensDirectionProvider.notifier).state =
+                    cur == CameraLensDirection.back ? CameraLensDirection.front : CameraLensDirection.back;
+                _streaming = false;
+              },
+            ),
           ]),
         ),
       ]),
+    );
+  }
+
+  Widget _realPreview(Color target) {
+    final lens = ref.watch(lensDirectionProvider);
+    final ctrlAsync = ref.watch(cameraControllerProvider(lens));
+    return ctrlAsync.when(
+      data: (ctrl) {
+        _ensureStream(ctrl, target);
+        return SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: ctrl.value.previewSize?.height ?? 1080,
+              height: ctrl.value.previewSize?.width ?? 1920,
+              child: CameraPreview(ctrl),
+            ),
+          ),
+        );
+      },
+      loading: () => const ColoredBox(color: Color(0xFF15110C)),
+      error: (_, __) => _simulated(kVariants[ref.read(gameProvider).myVariant]!.family),
+    );
+  }
+
+  // Viseur simulé : fonds « photo » de la famille (repli desktop/web).
+  Widget _simulated(String family) {
+    return Stack(children: [
+      for (final gr in photoLayers(family)) DecoratedBox(decoration: BoxDecoration(gradient: gr), child: const SizedBox.expand()),
+    ]);
+  }
+
+  Widget _targetChip(L10n t, VariantDef v, String lang) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(9, 9, 16, 9),
+      decoration: BoxDecoration(color: const Color(0x66000000), borderRadius: BorderRadius.circular(999)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: v.color,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
+          ),
+        ),
+        const SizedBox(width: 11),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(t.camTarget.toUpperCase(),
+              style: MdaType.sans(size: 10.5, weight: FontWeight.w600, letterSpacing: 1.2, color: Colors.white70)),
+          Text(v.name(lang), style: MdaType.serif(size: 18, height: 1, color: Colors.white)),
+        ]),
+      ]),
+    );
+  }
+
+  // Sous le chip : feedback temps réel (« Parfait ! / Trop chaud … ») si caméra,
+  // sinon consigne simple.
+  Widget _liveHint(L10n t, Color target, bool hasCamera) {
+    String label;
+    if (hasCamera) {
+      final live = ref.watch(liveColorProvider(target));
+      label = verdictLabel(live.verdict, live.detected, target);
+    } else {
+      label = t.camFrameSomething;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(color: const Color(0x4D000000), borderRadius: BorderRadius.circular(999)),
+      child: Text(label, style: MdaType.sans(size: 13, color: Colors.white.withValues(alpha: 0.9))),
     );
   }
 }

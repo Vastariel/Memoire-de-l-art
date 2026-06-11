@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../data/artist_names.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/game_models.dart';
 import '../../providers/auth_provider.dart';
@@ -31,6 +32,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _pseudo = TextEditingController();
   final _code = TextEditingController();
   final _instName = TextEditingController();
+  late final List<String> _suggestions = randomArtistSuggestions(4);
 
   @override
   void dispose() {
@@ -186,6 +188,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         autofocus: true,
         style: MdaType.serif(size: 17, color: context.fg1),
         decoration: const InputDecoration(hintText: 'Camille'),
+        onChanged: (_) => setState(() {}),
+      ),
+      const SizedBox(height: 16),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final name in _suggestions)
+            MdaChip(
+              name,
+              active: _pseudo.text.trim() == name,
+              onTap: () => setState(() {
+                _pseudo.text = name;
+                _pseudo.selection = TextSelection.collapsed(offset: name.length);
+              }),
+            ),
+        ],
       ),
     ]);
   }

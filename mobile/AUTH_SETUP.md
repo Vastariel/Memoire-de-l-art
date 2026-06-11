@@ -7,7 +7,6 @@
 >
 > Ce guide explique, **en clair**, ce qu'il faudra créer pour activer la vraie
 > connexion. Rien à faire tant que tu n'es pas prêt à tester sur un téléphone.
-
 ## Ce qu'est un « identifiant » ici
 Pour qu'un téléphone puisse dire à Google/Apple « connecte cet utilisateur »,
 il faut une **clé d'application** délivrée gratuitement par un tableau de bord.
