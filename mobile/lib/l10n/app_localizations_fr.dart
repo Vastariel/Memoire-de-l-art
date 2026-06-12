@@ -15,7 +15,7 @@ class L10nFr extends L10n {
   String get tabArtwork => 'Œuvre';
 
   @override
-  String get tabInstances => 'Instances';
+  String get tabInstances => 'Ateliers';
 
   @override
   String get tabCollection => 'Collection';
@@ -99,7 +99,7 @@ class L10nFr extends L10n {
 
   @override
   String get consentText =>
-      'J\'accepte la politique de confidentialité et le traitement de mes données (RGPD). Mes photos ne sont visibles que dans mes instances.';
+      'J\'accepte la politique de confidentialité et le traitement de mes données (RGPD). Mes photos ne sont visibles que dans mes ateliers.';
 
   @override
   String get onbStart => 'Commencer';
@@ -115,7 +115,7 @@ class L10nFr extends L10n {
       'Ton pseudo apparaît sur les blocs que tu peins et au classement.';
 
   @override
-  String get onbStep3 => 'Étape 3 · une instance';
+  String get onbStep3 => 'Étape 3 · un atelier';
 
   @override
   String get onbJoinOrCreate => 'Rejoins ou crée un atelier';
@@ -134,30 +134,30 @@ class L10nFr extends L10n {
       'En cours de semaine ? Tu joues dès demain, et tes photos déjà prises sont importées dans l\'œuvre.';
 
   @override
-  String get onbInstanceNamePlaceholder => 'Nom de l\'instance';
+  String get onbInstanceNamePlaceholder => 'Nom de l\'atelier';
 
   @override
-  String get onbInstanceMode => 'Mode de l\'instance';
+  String get onbInstanceMode => 'Mode de l\'atelier';
 
   @override
-  String get modeSharedTitle => 'Partagée';
+  String get modeSharedTitle => 'Partagé';
 
   @override
-  String get modeSeparateTitle => 'Séparée';
+  String get modeSeparateTitle => 'Séparé';
 
   @override
   String get modeSharedDesc =>
-      'Une seule photo par jour nourrit cette instance et tes autres instances partagées.';
+      'Une seule photo par jour nourrit cet atelier et tes autres ateliers partagés.';
 
   @override
   String get modeSeparateDesc =>
-      'Exige une photo dédiée chaque jour, en plus de tes autres instances.';
+      'Exige une photo dédiée chaque jour, en plus de tes autres ateliers.';
 
   @override
-  String get onbJoinInstance => 'Rejoindre l\'instance';
+  String get onbJoinInstance => 'Rejoindre l\'atelier';
 
   @override
-  String get onbCreateInstance => 'Créer l\'instance';
+  String get onbCreateInstance => 'Créer l\'atelier';
 
   @override
   String get onbScanQr =>
@@ -209,7 +209,7 @@ class L10nFr extends L10n {
 
   @override
   String taskSharedSub(int n, String variant) {
-    return 'Nourrit $n instances · variante $variant';
+    return 'Nourrit $n ateliers · variante $variant';
   }
 
   @override
@@ -219,7 +219,7 @@ class L10nFr extends L10n {
 
   @override
   String get photosHelpNote =>
-      'Une photo partagée alimente toutes tes instances « Partagées ». Chaque instance « Séparée » réclame sa propre photo.';
+      'Une photo partagée alimente tous tes ateliers « Partagés ». Chaque atelier « Séparé » réclame sa propre photo.';
 
   @override
   String catchupCount(int count) {
@@ -415,7 +415,7 @@ class L10nFr extends L10n {
   String get betRule => 'Un seul pari par semaine. Modifiable jusqu\'à samedi.';
 
   @override
-  String get myInstances => 'Mes instances';
+  String get myInstances => 'Mes ateliers';
 
   @override
   String get labelSolo => 'solo';
@@ -436,7 +436,7 @@ class L10nFr extends L10n {
   String get separateExplain => 'Chacun doit poster sa propre photo du jour.';
 
   @override
-  String get soloInstance => 'Instance solo';
+  String get soloInstance => 'Atelier solo';
 
   @override
   String get soloInstanceDesc =>

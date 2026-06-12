@@ -112,7 +112,7 @@ abstract class L10n {
   /// No description provided for @tabInstances.
   ///
   /// In en, this message translates to:
-  /// **'Instances'**
+  /// **'Ateliers'**
   String get tabInstances;
 
   /// No description provided for @tabCollection.
@@ -274,7 +274,7 @@ abstract class L10n {
   /// No description provided for @consentText.
   ///
   /// In en, this message translates to:
-  /// **'I accept the privacy policy and the processing of my data (GDPR). My photos are only visible within my instances.'**
+  /// **'I accept the privacy policy and the processing of my data (GDPR). My photos are only visible within my ateliers.'**
   String get consentText;
 
   /// No description provided for @onbStart.
@@ -304,7 +304,7 @@ abstract class L10n {
   /// No description provided for @onbStep3.
   ///
   /// In en, this message translates to:
-  /// **'Step 3 · an instance'**
+  /// **'Step 3 · an atelier'**
   String get onbStep3;
 
   /// No description provided for @onbJoinOrCreate.
@@ -340,13 +340,13 @@ abstract class L10n {
   /// No description provided for @onbInstanceNamePlaceholder.
   ///
   /// In en, this message translates to:
-  /// **'Instance name'**
+  /// **'Atelier name'**
   String get onbInstanceNamePlaceholder;
 
   /// No description provided for @onbInstanceMode.
   ///
   /// In en, this message translates to:
-  /// **'Instance mode'**
+  /// **'Atelier mode'**
   String get onbInstanceMode;
 
   /// No description provided for @modeSharedTitle.
@@ -364,25 +364,25 @@ abstract class L10n {
   /// No description provided for @modeSharedDesc.
   ///
   /// In en, this message translates to:
-  /// **'One photo a day feeds this instance and your other shared instances.'**
+  /// **'One photo a day feeds this atelier and your other shared ateliers.'**
   String get modeSharedDesc;
 
   /// No description provided for @modeSeparateDesc.
   ///
   /// In en, this message translates to:
-  /// **'Requires a dedicated photo each day, on top of your other instances.'**
+  /// **'Requires a dedicated photo each day, on top of your other ateliers.'**
   String get modeSeparateDesc;
 
   /// No description provided for @onbJoinInstance.
   ///
   /// In en, this message translates to:
-  /// **'Join the instance'**
+  /// **'Join the atelier'**
   String get onbJoinInstance;
 
   /// No description provided for @onbCreateInstance.
   ///
   /// In en, this message translates to:
-  /// **'Create the instance'**
+  /// **'Create the atelier'**
   String get onbCreateInstance;
 
   /// No description provided for @onbScanQr.
@@ -454,7 +454,7 @@ abstract class L10n {
   /// No description provided for @taskSharedSub.
   ///
   /// In en, this message translates to:
-  /// **'Feeds {n} instances · variant {variant}'**
+  /// **'Feeds {n} ateliers · variant {variant}'**
   String taskSharedSub(int n, String variant);
 
   /// No description provided for @taskSeparateSub.
@@ -466,7 +466,7 @@ abstract class L10n {
   /// No description provided for @photosHelpNote.
   ///
   /// In en, this message translates to:
-  /// **'One shared photo feeds all your Shared instances. Each Separate instance needs its own photo.'**
+  /// **'One shared photo feeds all your Shared ateliers. Each Separate atelier needs its own photo.'**
   String get photosHelpNote;
 
   /// No description provided for @catchupCount.
@@ -772,7 +772,7 @@ abstract class L10n {
   /// No description provided for @myInstances.
   ///
   /// In en, this message translates to:
-  /// **'My instances'**
+  /// **'My ateliers'**
   String get myInstances;
 
   /// No description provided for @labelSolo.
@@ -814,13 +814,13 @@ abstract class L10n {
   /// No description provided for @soloInstance.
   ///
   /// In en, this message translates to:
-  /// **'Solo instance'**
+  /// **'Solo atelier'**
   String get soloInstance;
 
   /// No description provided for @soloInstanceDesc.
   ///
   /// In en, this message translates to:
-  /// **'Your private studio: no ranking, just your artwork.'**
+  /// **'Your private atelier: no ranking, just your artwork.'**
   String get soloInstanceDesc;
 
   /// No description provided for @labelYou.

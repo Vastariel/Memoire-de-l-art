@@ -12,7 +12,6 @@ class ApiClient {
               baseUrl: '${AppConfig.apiBaseUrl}/api/v1',
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 25),
-              headers: {'content-type': 'application/json'},
             )) {
     _dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) async {
       final t = _token ??= await _storage.read(key: _kToken);

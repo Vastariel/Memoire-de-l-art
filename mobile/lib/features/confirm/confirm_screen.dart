@@ -137,6 +137,10 @@ class _ConfirmScreenState extends ConsumerState<ConfirmScreen> {
                   const SizedBox(height: 18),
                   MdaBanner(icon: 'layers', tone: BannerTone.shared, text: t.alsoFed('Mes essais')),
                 ],
+                if (g.lastError != null) ...[
+                  const SizedBox(height: 14),
+                  MdaBanner(icon: 'info', tone: BannerTone.clay, text: g.lastError!),
+                ],
               ],
             ),
           ),

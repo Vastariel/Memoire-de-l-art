@@ -1,5 +1,7 @@
 // game_provider.dart — état de jeu de la semaine (Phase 1 : données simulées).
 
+import 'dart:developer' as developer;
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/mock_data.dart';
 import '../engine/mosaic_engine.dart';
@@ -23,6 +25,7 @@ class GameState {
   final String? captureTaskId;
   final int lastScore;
   final int lastPoints;
+  final String? lastError;
 
   const GameState({
     required this.week,
@@ -39,6 +42,7 @@ class GameState {
     this.captureTaskId,
     this.lastScore = 0,
     this.lastPoints = 0,
+    this.lastError,
   });
 
   factory GameState.initial() => GameState(
@@ -94,6 +98,8 @@ class GameState {
     String? captureTaskId,
     int? lastScore,
     int? lastPoints,
+    String? lastError,
+    bool clearError = false,
   }) =>
       GameState(
         week: week,
@@ -110,6 +116,7 @@ class GameState {
         captureTaskId: captureTaskId ?? this.captureTaskId,
         lastScore: lastScore ?? this.lastScore,
         lastPoints: lastPoints ?? this.lastPoints,
+        lastError: clearError ? null : (lastError ?? this.lastError),
       );
 }
 
@@ -204,7 +211,14 @@ class GameNotifier extends StateNotifier<GameState> {
   /// Capture done. Online + a real photo file → upload it (server computes
   /// ΔE/variance/score/points). Otherwise use the simulated score.
   Future<void> captureDone({String? photoPath, required int fallbackScore}) async {
-    if (_useApi && photoPath != null && state.activeInstanceId.isNotEmpty) {
+    String? err;
+    if (!_useApi) {
+      err = 'Mode hors-ligne actif (USE_API=false).';
+    } else if (photoPath == null) {
+      err = 'Aucun fichier photo (caméra simulée).';
+    } else if (state.activeInstanceId.isEmpty) {
+      err = 'Aucune instance active — crée ou rejoins une instance.';
+    } else {
       final task = state.currentTask;
       final sep = task?.isSeparate ?? false;
       try {
@@ -220,14 +234,23 @@ class GameNotifier extends StateNotifier<GameState> {
           lastScore: (r['score'] as num?)?.toInt() ?? fallbackScore,
           lastPoints: (r['points'] as num?)?.toInt() ?? 0,
           streak: (r['streak'] as num?)?.toInt() ?? state.streak,
+          clearError: true,
         );
         return;
-      } catch (_) {/* fall back to local */}
+      } on DioException catch (e) {
+        final code = e.response?.statusCode;
+        final body = e.response?.data;
+        err = 'Upload HTTP ${code ?? '?'} : ${body ?? e.message ?? e.type.name}';
+        developer.log(err, name: 'mda.upload', error: e);
+      } catch (e, st) {
+        err = 'Upload : $e';
+        developer.log(err, name: 'mda.upload', error: e, stackTrace: st);
+      }
     }
     _uploadedOnline = false;
     final bonus = (fallbackScore * 0.6).round();
     final pts = 60 + bonus + (state.streak > 0 ? 20 : 0);
-    state = state.copyWith(lastScore: fallbackScore, lastPoints: pts);
+    state = state.copyWith(lastScore: fallbackScore, lastPoints: pts, lastError: err);
   }
 
   /// Validate the contribution. Online → just refresh from the server (the
