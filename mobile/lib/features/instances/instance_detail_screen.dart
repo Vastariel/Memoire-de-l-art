@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/mock_data.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/game_models.dart';
+import '../../providers/data_providers.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/colors.dart';
 import '../../theme/palette.dart';
@@ -30,7 +31,8 @@ class _InstanceDetailScreenState extends ConsumerState<InstanceDetailScreen> {
     final t = L10n.of(context);
     final g = ref.watch(gameProvider);
     final inst = g.instances.firstWhere((i) => i.id == widget.instanceId, orElse: () => g.instances.first);
-    final ranked = [...MockData.members]..sort((a, b) => b.points.compareTo(a.points));
+    final lb = ref.watch(leaderboardProvider(widget.instanceId)).valueOrNull;
+    final ranked = [...(lb ?? MockData.members)]..sort((a, b) => b.points.compareTo(a.points));
 
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 24),

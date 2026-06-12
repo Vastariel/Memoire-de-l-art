@@ -2,10 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/mock_data.dart';
 import '../../engine/mosaic_engine.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/game_models.dart';
+import '../../providers/data_providers.dart';
 import '../../theme/colors.dart';
 import '../../theme/palette.dart';
 import '../../theme/theme.dart';
@@ -20,7 +20,8 @@ class CollectionScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = L10n.of(context);
-    final unlocked = MockData.gallery.where((g) => g.unlocked).length;
+    final items = ref.watch(collectionProvider).valueOrNull ?? const <CollectionItem>[];
+    final unlocked = items.where((g) => g.unlocked).length;
 
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
@@ -43,7 +44,7 @@ class CollectionScreen extends ConsumerWidget {
             mainAxisSpacing: 16,
             crossAxisSpacing: 16,
             childAspectRatio: 0.62,
-            children: [for (final g in MockData.gallery) _GalleryCard(item: g)],
+            children: [for (final g in items) _GalleryCard(item: g)],
           ),
         ),
       ],

@@ -7,6 +7,7 @@ import '../../data/mock_data.dart';
 import '../../engine/mosaic_engine.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/game_models.dart';
+import '../../providers/data_providers.dart';
 import '../../providers/game_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/colors.dart';
@@ -29,7 +30,9 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
 
   void _showBlock(ArtCell cell, String lang) {
     final v = kVariants[cell.variant]!;
-    final c = MockData.contributors[cell.variant] ?? const BlockContribution('—', '', 80);
+    final fills = ref.read(instanceFillProvider(ref.read(gameProvider).activeInstanceId)).valueOrNull ??
+        MockData.contributors;
+    final c = fills[cell.variant] ?? const BlockContribution('—', '', 80);
     final t = L10n.of(context);
     showMdaSheet(context, builder: (ctx) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
@@ -67,6 +70,7 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
     final t = L10n.of(context);
     final lang = ref.watch(langProvider);
     final g = ref.watch(gameProvider);
+    ref.watch(instanceFillProvider(g.activeInstanceId)); // prefetch block authors
     final filledCount = g.filled.length;
 
     return ListView(
