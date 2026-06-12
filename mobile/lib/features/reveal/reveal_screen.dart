@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../engine/mosaic_engine.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/data_providers.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/theme.dart';
 import '../../theme/typography.dart';
@@ -36,6 +37,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
   Widget build(BuildContext context) {
     final t = L10n.of(context);
     final g = ref.watch(gameProvider);
+    final artwork = ref.watch(artworkDataProvider).valueOrNull;
     final all = kFamilies.keys.toSet();
 
     return Scaffold(
@@ -75,6 +77,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
                             stagger: _phase == 0,
                             pulse: false,
                             gap: 1,
+                            artwork: artwork,
                           ),
                         ),
                       ),

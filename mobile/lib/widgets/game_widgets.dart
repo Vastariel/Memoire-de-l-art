@@ -337,22 +337,25 @@ class ReactionStamp extends StatelessWidget {
 }
 
 class StampRow extends StatefulWidget {
-  const StampRow({super.key});
+  final void Function(String stampId, bool active)? onToggle;
+  const StampRow({super.key, this.onToggle});
   @override
   State<StampRow> createState() => _StampRowState();
 }
 
 class _StampRowState extends State<StampRow> {
   final Set<String> _active = {};
+
+  void _toggle(String id) {
+    setState(() => _active.contains(id) ? _active.remove(id) : _active.add(id));
+    widget.onToggle?.call(id, _active.contains(id));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Wrap(spacing: 8, runSpacing: 8, children: [
       for (final s in kStamps)
-        ReactionStamp(
-          stamp: s,
-          active: _active.contains(s.id),
-          onTap: () => setState(() => _active.contains(s.id) ? _active.remove(s.id) : _active.add(s.id)),
-        ),
+        ReactionStamp(stamp: s, active: _active.contains(s.id), onTap: () => _toggle(s.id)),
     ]);
   }
 }

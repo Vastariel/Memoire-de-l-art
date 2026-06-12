@@ -97,7 +97,7 @@ export async function instanceRoutes(app: FastifyInstance) {
     const a = await currentArtwork();
     if (!a) return reply.code(503).send({ error: 'Aucune œuvre active.' });
     const contribs = await db.query(
-      `SELECT c.variant_key, c.crops, u.pseudo, u.avatar_pigment AS pig, p.url, p.delta_e
+      `SELECT c.id, c.variant_key, c.crops, u.pseudo, u.avatar_pigment AS pig, p.url, p.delta_e
        FROM contributions c
        JOIN photos p ON p.id = c.photo_id
        JOIN app_users u ON u.id = c.user_id
@@ -107,7 +107,8 @@ export async function instanceRoutes(app: FastifyInstance) {
     return reply.send({
       artwork: { id: a.id, cols: a.cols, rows: a.rows, cells: a.cells },
       filled: contribs.rows.map(c => ({
-        variantKey: c.variant_key, pseudo: c.pseudo, pig: c.pig, url: c.url, deltaE: c.delta_e, crops: c.crops,
+        contributionId: c.id, variantKey: c.variant_key, pseudo: c.pseudo, pig: c.pig,
+        url: c.url, deltaE: c.delta_e, crops: c.crops,
       })),
     });
   });

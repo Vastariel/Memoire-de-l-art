@@ -1,6 +1,8 @@
 // mosaic.dart — rendu de l'œuvre v2 (port du composant Mosaic de mosaic.jsx).
 // Vue plate (pigments) ↔ vitrail (photos brutes recadrées), pulse du jour,
 // reveal en cascade. CustomPainter pour tenir 192 cellules sans peiner.
+// L'œuvre rendue est [artwork] (par défaut le moteur local kArtwork) — ce qui
+// permet d'afficher une œuvre créée dans l'admin et servie par l'API.
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -16,6 +18,7 @@ class MosaicWidget extends StatefulWidget {
   final double radius;
   final bool pulse;
   final bool stagger;
+  final ArtworkData? artwork; // null → moteur local (Semeur)
   final void Function(ArtCell cell, bool filled)? onTapCell;
 
   const MosaicWidget({
@@ -28,6 +31,7 @@ class MosaicWidget extends StatefulWidget {
     this.radius = 2,
     this.pulse = true,
     this.stagger = false,
+    this.artwork,
     this.onTapCell,
   });
 
@@ -38,6 +42,8 @@ class MosaicWidget extends StatefulWidget {
 class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMixin {
   late final AnimationController _pulse;
   late final AnimationController _stagger;
+
+  ArtworkData get _art => widget.artwork ?? kArtwork;
 
   @override
   void initState() {
@@ -72,24 +78,27 @@ class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMix
 
   void _handleTap(Offset local, Size size) {
     if (widget.onTapCell == null) return;
-    final col = (local.dx / size.width * kCols).floor().clamp(0, kCols - 1);
-    final row = (local.dy / size.height * kRows).floor().clamp(0, kRows - 1);
-    final cell = kArtwork.cells[row * kCols + col];
+    final art = _art;
+    final col = (local.dx / size.width * art.cols).floor().clamp(0, art.cols - 1);
+    final row = (local.dy / size.height * art.rows).floor().clamp(0, art.rows - 1);
+    final cell = art.cells[row * art.cols + col];
     final isFilled = widget.revealAll || widget.filled.contains(cell.family);
     widget.onTapCell!(cell, isFilled);
   }
 
   @override
   Widget build(BuildContext context) {
+    final art = _art;
     return AspectRatio(
-      aspectRatio: kCols / kRows,
+      aspectRatio: art.cols / art.rows,
       child: LayoutBuilder(builder: (context, c) {
         final size = Size(c.maxWidth, c.maxHeight);
-        Widget art = AnimatedBuilder(
+        Widget out = AnimatedBuilder(
           animation: Listenable.merge([_pulse, _stagger]),
           builder: (_, __) => CustomPaint(
             size: size,
             painter: _MosaicPainter(
+              art: art,
               filled: widget.filled,
               todayFamily: widget.todayFamily,
               vitrail: widget.vitrail,
@@ -105,12 +114,9 @@ class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMix
           ),
         );
         if (widget.onTapCell != null) {
-          art = GestureDetector(
-            onTapUp: (d) => _handleTap(d.localPosition, size),
-            child: art,
-          );
+          out = GestureDetector(onTapUp: (d) => _handleTap(d.localPosition, size), child: out);
         }
-        return art;
+        return out;
       }),
     );
   }
@@ -119,6 +125,7 @@ class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMix
 double _easeOut(double t) => 1 - math.pow(1 - t, 3).toDouble();
 
 class _MosaicPainter extends CustomPainter {
+  final ArtworkData art;
   final Set<String> filled;
   final String? todayFamily;
   final double vitrail;
@@ -132,6 +139,7 @@ class _MosaicPainter extends CustomPainter {
   final Color lineColor;
 
   _MosaicPainter({
+    required this.art,
     required this.filled,
     required this.todayFamily,
     required this.vitrail,
@@ -147,9 +155,9 @@ class _MosaicPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cellW = (size.width - gap * (kCols - 1)) / kCols;
-    final cellH = (size.height - gap * (kRows - 1)) / kRows;
-    final total = kArtwork.cells.length;
+    final cellW = (size.width - gap * (art.cols - 1)) / art.cols;
+    final cellH = (size.height - gap * (art.rows - 1)) / art.rows;
+    final total = art.cells.length;
 
     Rect cellRect(ArtCell c) => Rect.fromLTWH(c.col * (cellW + gap), c.row * (cellH + gap), cellW, cellH);
 
@@ -160,13 +168,12 @@ class _MosaicPainter extends CustomPainter {
       ..color = lineColor;
 
     // ── couche plate + vides + jour ──
-    for (final c in kArtwork.cells) {
+    for (final c in art.cells) {
       final r = cellRect(c);
       final rr = RRect.fromRectAndRadius(r, Radius.circular(radius));
       final isFilled = revealAll || filled.contains(c.family);
       final isToday = !isFilled && c.family == todayFamily;
 
-      // fond vide pour tout le monde (base)
       canvas.drawRRect(rr, emptyPaint);
       canvas.drawRRect(rr, borderPaint);
 
@@ -199,7 +206,7 @@ class _MosaicPainter extends CustomPainter {
       final full = Offset.zero & size;
       canvas.saveLayer(full, Paint()..color = Colors.white.withValues(alpha: vitrail.clamp(0, 1)));
       final shaders = <String, List<Shader>>{};
-      for (final c in kArtwork.cells) {
+      for (final c in art.cells) {
         final isFilled = revealAll || filled.contains(c.family);
         if (!isFilled) continue;
         final layers = shaders.putIfAbsent(
@@ -218,6 +225,7 @@ class _MosaicPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MosaicPainter old) =>
+      !identical(old.art, art) ||
       old.vitrail != vitrail ||
       old.pulseT != pulseT ||
       old.staggerT != staggerT ||

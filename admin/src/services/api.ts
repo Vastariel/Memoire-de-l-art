@@ -1,6 +1,6 @@
 import axios from 'axios';
+import type { Cell } from '../lib/pixelize';
 
-// Token stored in sessionStorage for the current browser session
 const getToken = () => sessionStorage.getItem('admin_token') ?? '';
 export const setToken = (t: string) => sessionStorage.setItem('admin_token', t);
 export const clearToken = () => sessionStorage.removeItem('admin_token');
@@ -13,62 +13,66 @@ http.interceptors.request.use(cfg => {
 });
 
 // ── Types ──────────────────────────────────────────────────────
-
 export interface Stats {
-  instances:   number;
-  players:     number;
+  instances: number;
+  users: number;
   photosToday: number;
-  zonesTotal:  number;
-  zonesFilled: number;
+  weeksPlanned: number;
+  currentIsoWeek: string;
 }
 
-export interface AdminInstance {
-  id:          string;
-  code:        string;
-  name:        string;
-  year_:       number;
-  month_:      number;
-  players:     number;
-  today_count: number;
-  filled:      number;
-}
+export type ArtworkStatus = 'draft' | 'planned' | 'active' | 'revealed';
 
 export interface AdminArtwork {
-  id:           string;
-  title?:       string;
-  artist?:      string;
-  published_at: string | null;
-  created_at:   string;
-  zone_count:   number;
+  id: string;
+  title_fr: string | null;
+  artist: string | null;
+  year_: number | null;
+  status: ArtworkStatus;
+  iso_year: number | null;
+  iso_week: number | null;
+  created_at: string;
 }
 
-export interface SegmentResult {
-  cols:  number;
-  rows:  number;
-  cells: Array<{ index: number; col: number; row: number; zoneId: string }>;
-  zones: Array<{ id: string; pigment: string; cellCount: number; targetHex: string }>;
+export interface AdminPhoto {
+  id: string;
+  url: string;
+  taken_on: string;
+  day_: number;
+  target_variant_key: string;
+  delta_e: number | null;
+  pseudo: string | null;
+}
+
+export interface ArtworkPayload {
+  id: string;
+  titleFr?: string;
+  titleEn?: string;
+  artist?: string;
+  year?: number;
+  descriptionFr?: string;
+  descriptionEn?: string;
+  sourceLicense?: string;
+  cols: number;
+  rows: number;
+  hdUrl?: string;
+  status: ArtworkStatus;
+  isoYear: number;
+  isoWeek: number;
+  cells: Cell[];
+  families: { key: string; day: number; nameFr: string; nameEn: string }[];
+  variants: { key: string; familyKey: string; nameFr: string; nameEn: string; hex: string }[];
 }
 
 // ── Calls ──────────────────────────────────────────────────────
-
 export const api = {
-  stats:     () => http.get<Stats>('/stats').then(r => r.data),
-  instances: () => http.get<{ instances: AdminInstance[] }>('/instances').then(r => r.data.instances),
-  artworks:  () => http.get<{ artworks: AdminArtwork[] }>('/artworks').then(r => r.data.artworks),
-
-  segment: (file: File, blockSize: number, maxZones: number) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('blockSize', String(blockSize));
-    fd.append('maxZones', String(maxZones));
-    return http.post<SegmentResult>('/artworks/segment', fd).then(r => r.data);
-  },
-
-  publish: (payload: {
-    cols: number; rows: number;
-    cells: unknown[]; zones: unknown[];
-    title?: string; artist?: string; year?: number; description?: string;
-  }) => http.post<{ id: string; zonesCreated: number }>('/artworks/publish', payload).then(r => r.data),
-
+  stats: () => http.get<Stats>('/stats').then(r => r.data),
+  artworks: () => http.get<{ artworks: AdminArtwork[] }>('/artworks').then(r => r.data.artworks),
+  createArtwork: (p: ArtworkPayload) => http.post<{ ok: boolean; id: string }>('/artworks', p).then(r => r.data),
+  setStatus: (id: string, status: ArtworkStatus) =>
+    http.post(`/artworks/${id}/status`, { status }).then(r => r.data),
   deleteArtwork: (id: string) => http.delete(`/artworks/${id}`),
+  gallery: (params: { instanceId?: string; userId?: string } = {}) =>
+    http.get<{ photos: AdminPhoto[] }>('/gallery', { params }).then(r => r.data.photos),
+  deletePhoto: (id: string) => http.delete(`/photos/${id}`),
 };

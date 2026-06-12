@@ -3,10 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../data/mock_data.dart';
 import '../../engine/mosaic_engine.dart';
 import '../../l10n/app_localizations.dart';
-import '../../models/game_models.dart';
+import '../../providers/api_provider.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/game_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -31,8 +30,8 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
   void _showBlock(ArtCell cell, String lang) {
     final v = kVariants[cell.variant]!;
     final fills = ref.read(instanceFillProvider(ref.read(gameProvider).activeInstanceId)).valueOrNull ??
-        MockData.contributors;
-    final c = fills[cell.variant] ?? const BlockContribution('—', '', 80);
+        const <String, FilledInfo>{};
+    final c = fills[cell.variant] ?? const FilledInfo('—', 80, null);
     final t = L10n.of(context);
     showMdaSheet(context, builder: (ctx) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
@@ -46,12 +45,9 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
               Text(v.name(lang), style: MdaType.serif(size: 23, weight: FontWeight.w500, color: ctx.fg1)),
               const SizedBox(height: 8),
               Row(children: [
-                MdaAvatar(pig: cell.variant, initial: c.pseudo[0], size: 30),
+                MdaAvatar(pig: cell.variant, initial: c.pseudo.isNotEmpty ? c.pseudo[0] : '—', size: 30),
                 const SizedBox(width: 9),
-                Text.rich(TextSpan(children: [
-                  TextSpan(text: c.pseudo, style: MdaType.sans(size: 14, weight: FontWeight.w700, color: ctx.fg1)),
-                  TextSpan(text: ' · ${c.date}', style: MdaType.sans(size: 14, color: ctx.fg1)),
-                ])),
+                Text(c.pseudo, style: MdaType.sans(size: 14, weight: FontWeight.w700, color: ctx.fg1)),
               ]),
             ]),
           ),
@@ -60,7 +56,11 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
         const SizedBox(height: 18),
         Overline(t.leaveAStamp),
         const SizedBox(height: 9),
-        const StampRow(),
+        StampRow(
+          onToggle: c.contributionId == null
+              ? null
+              : (id, _) => ref.read(apiClientProvider).reactToContribution(c.contributionId!, id).catchError((_) {}),
+        ),
       ]);
     });
   }
@@ -71,6 +71,7 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
     final lang = ref.watch(langProvider);
     final g = ref.watch(gameProvider);
     ref.watch(instanceFillProvider(g.activeInstanceId)); // prefetch block authors
+    final artwork = ref.watch(artworkDataProvider).valueOrNull;
     final filledCount = g.filled.length;
 
     return ListView(
@@ -98,6 +99,7 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
                     todayFamily: g.todayFamily,
                     vitrail: _zoom,
                     pulse: _zoom < 0.3,
+                    artwork: artwork,
                     onTapCell: (cell, isFilled) {
                       if (isFilled) _showBlock(cell, lang);
                     },
