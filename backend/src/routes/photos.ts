@@ -33,6 +33,27 @@ export async function photoRoutes(app: FastifyInstance) {
   app.post('/', { onRequest: [app.authenticate] }, submit);
   // Catch-up uses the same handler with a past `day` field.
   app.post('/catchup', { onRequest: [app.authenticate] }, submit);
+
+  // Public photo proxy: streams the stored JPEG from MinIO. Photo IDs are
+  // unguessable UUIDs; non-deleted photos are visible to whoever has the URL
+  // (admin gallery, mobile collection, instance contributions).
+  app.get('/file/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const row = await db.query<{ storage_key: string }>(
+      `SELECT storage_key FROM photos WHERE id = $1 AND deleted_at IS NULL`,
+      [id],
+    );
+    const key = row.rows[0]?.storage_key;
+    if (!key) return reply.code(404).send({ error: 'Photo introuvable.' });
+    try {
+      const stream = await storage.getObjectStream(key);
+      reply.header('Content-Type', 'image/jpeg');
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+      return reply.send(stream);
+    } catch {
+      return reply.code(404).send({ error: 'Photo introuvable.' });
+    }
+  });
 }
 
 async function submit(req: FastifyRequest, reply: FastifyReply) {

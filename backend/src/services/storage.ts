@@ -1,5 +1,6 @@
 import { Client as MinioClient } from 'minio';
 import sharp from 'sharp';
+import type { Readable } from 'node:stream';
 import { env } from '../config/env';
 
 const minio = new MinioClient({
@@ -11,6 +12,12 @@ const minio = new MinioClient({
 });
 
 export interface StoredPhoto { key: string; url: string; }
+
+// Public-facing URL: proxied through the API so the browser/mobile never need
+// direct access to MinIO. The /api/v1/photos/file/:id route streams the object.
+function publicUrl(photoId: string): string {
+  return `/api/v1/photos/file/${photoId}`;
+}
 
 export const storage = {
   /**
@@ -31,8 +38,12 @@ export const storage = {
       'Cache-Control': 'public, max-age=31536000, immutable',
     });
 
-    const scheme = env.STORAGE_USE_SSL ? 'https' : 'http';
-    return { key, url: `${scheme}://${env.STORAGE_ENDPOINT}/${env.STORAGE_BUCKET}/${key}` };
+    return { key, url: publicUrl(photoId) };
+  },
+
+  /** Stream an object back from MinIO so the API can proxy it. */
+  async getObjectStream(key: string): Promise<Readable> {
+    return minio.getObject(env.STORAGE_BUCKET, key);
   },
 
   async deletePhoto(key: string): Promise<void> {

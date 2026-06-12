@@ -6,7 +6,8 @@ import {
 import { InboxOutlined, UploadOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import { FAMILIES, VARIANTS } from '../lib/palette';
-import { drawCrop, cellsFromCanvas, renderPreview, type Cell, type CropParams } from '../lib/pixelize';
+import { drawCrop, rebalanceByDay, renderPreview, type Cell, type CropParams } from '../lib/pixelize';
+import { fetchArtworkFromUrl, loadImage } from '../lib/wikimedia';
 import { api, type ArtworkStatus } from '../services/api';
 
 const { Title, Text } = Typography;
@@ -33,6 +34,8 @@ export const ArtworkBuilder: React.FC = () => {
     Object.fromEntries(FAMILIES.map(f => [f.key, f.day])),
   );
   const [publishing, setPublishing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [wikiUrl, setWikiUrl] = useState('');
   const [form] = Form.useForm();
 
   const gridRef = useRef<HTMLCanvasElement>(document.createElement('canvas'));
@@ -40,14 +43,16 @@ export const ArtworkBuilder: React.FC = () => {
 
   const iso = useMemo(isoWeekNow, []);
 
-  // Recompute cells + preview whenever the image or params change.
+  // Recompute cells + preview whenever the image, crop, grid or day mapping
+  // changes. Cells are rebalanced so each family fills a quota ∝ its assigned
+  // day (day-1 = few cells, day-7 = many).
   useEffect(() => {
     if (!img) return;
     drawCrop(img, gridRef.current, cols, rows, crop);
-    const next = cellsFromCanvas(gridRef.current, cols, rows);
+    const next = rebalanceByDay(gridRef.current, cols, rows, dayByFamily);
     setCells(next);
     if (previewRef.current) renderPreview(previewRef.current, next, cols, rows);
-  }, [img, crop, cols, rows]);
+  }, [img, crop, cols, rows, dayByFamily]);
 
   const onFile: UploadProps['beforeUpload'] = file => {
     const url = URL.createObjectURL(file);
@@ -57,9 +62,39 @@ export const ArtworkBuilder: React.FC = () => {
     return false; // prevent auto-upload
   };
 
+  async function importFromWiki() {
+    if (!wikiUrl.trim()) return;
+    setImporting(true);
+    try {
+      const meta = await fetchArtworkFromUrl(wikiUrl);
+      const image = await loadImage(meta.imageUrl);
+      setImg(image);
+      form.setFieldsValue({
+        titleFr: meta.titleFr ?? form.getFieldValue('titleFr'),
+        titleEn: meta.titleEn ?? form.getFieldValue('titleEn'),
+        artist: meta.artist ?? form.getFieldValue('artist'),
+        year: meta.year ?? form.getFieldValue('year'),
+        descriptionFr: meta.descriptionFr ?? form.getFieldValue('descriptionFr'),
+        descriptionEn: meta.descriptionEn ?? form.getFieldValue('descriptionEn'),
+        sourceLicense: meta.sourceLicense,
+      });
+      message.success('Œuvre pré-remplie depuis Wikipédia/Wikimedia.');
+    } catch (e: any) {
+      message.error(e?.message ?? 'Import impossible.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const familiesUsed = useMemo(() => {
     const s = new Set(cells.map(c => c.family));
     return FAMILIES.filter(f => s.has(f.key)).length;
+  }, [cells]);
+
+  const countByFamily = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const c of cells) m[c.family] = (m[c.family] ?? 0) + 1;
+    return m;
   }, [cells]);
 
   async function publish() {
@@ -110,9 +145,24 @@ export const ArtworkBuilder: React.FC = () => {
         {/* ── Left: image + crop + pixelisation ── */}
         <Col xs={24} lg={12}>
           <Card title="1 · Image & recadrage 3:4" size="small">
+            <Space.Compact style={{ width: '100%', marginBottom: 12 }}>
+              <Input
+                placeholder="Lien Wikipédia ou Wikimedia Commons"
+                value={wikiUrl}
+                onChange={e => setWikiUrl(e.target.value)}
+                onPressEnter={importFromWiki}
+                allowClear
+              />
+              <Button type="primary" loading={importing} disabled={!wikiUrl.trim()} onClick={importFromWiki}>
+                Importer
+              </Button>
+            </Space.Compact>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+              Pré-remplit le titre, l'artiste, l'année, la description et la licence depuis l'article ou le fichier.
+            </Text>
             <Upload.Dragger beforeUpload={onFile} showUploadList={false} accept="image/*" style={{ marginBottom: 16 }}>
               <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-              <p className="ant-upload-text">Glisse une image ici ou clique</p>
+              <p className="ant-upload-text">…ou glisse une image ici</p>
             </Upload.Dragger>
 
             {img && (
@@ -158,6 +208,9 @@ export const ArtworkBuilder: React.FC = () => {
           </Card>
 
           <Card title="3 · Famille → jour (lundi=1 … dimanche=7)" size="small" style={{ marginTop: 16 }}>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              Le nombre de cellules par famille est proportionnel au jour : J1 = peu de pixels, J7 = beaucoup. Plus la semaine avance, plus l'œuvre se remplit.
+            </Text>
             <Row gutter={[8, 8]}>
               {FAMILIES.map(f => (
                 <Col span={12} key={f.key}>
@@ -166,6 +219,7 @@ export const ArtworkBuilder: React.FC = () => {
                     <Select size="small" style={{ width: 70 }} value={dayByFamily[f.key]}
                       onChange={d => setDayByFamily({ ...dayByFamily, [f.key]: d })}
                       options={[1, 2, 3, 4, 5, 6, 7].map(d => ({ value: d, label: `J${d}` }))} />
+                    <Tag color="blue">{countByFamily[f.key] ?? 0} px</Tag>
                   </Space>
                 </Col>
               ))}
