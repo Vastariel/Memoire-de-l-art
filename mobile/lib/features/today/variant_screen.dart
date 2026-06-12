@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/mock_data.dart';
 import '../../engine/mosaic_engine.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/data_providers.dart';
 import '../../providers/game_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/palette.dart';
@@ -23,6 +24,8 @@ class VariantScreen extends ConsumerWidget {
     final lang = ref.watch(langProvider);
     final g = ref.watch(gameProvider);
     final fam = kFamilies[g.todayFamily]!;
+    final claims = ref.watch(claimsProvider(g.activeInstanceId)).valueOrNull;
+    final taken = claims ?? MockData.takenVariants;
 
     return Scaffold(
       backgroundColor: context.paper,
@@ -41,13 +44,14 @@ class VariantScreen extends ConsumerWidget {
                   _VariantRow(
                     variantKey: vk,
                     lang: lang,
-                    takenBy: MockData.takenVariants[vk],
+                    takenBy: taken[vk],
                     mine: vk == g.myVariant,
                     blocks: kArtwork.countForVariant(vk),
-                    onTap: MockData.takenVariants.containsKey(vk)
+                    onTap: (taken.containsKey(vk) && vk != g.myVariant)
                         ? null
                         : () {
                             ref.read(gameProvider.notifier).claimVariant(vk);
+                            ref.invalidate(claimsProvider(g.activeInstanceId));
                             context.pop();
                           },
                   ),

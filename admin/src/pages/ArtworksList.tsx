@@ -51,6 +51,7 @@ export const ArtworksList: React.FC = () => {
       title: 'Actions', key: 'actions',
       render: (_: unknown, r: AdminArtwork) => (
         <Space>
+          <Button size="small" onClick={() => navigate(`/artworks/${r.id}/edit`)}>Modifier</Button>
           {r.status !== 'planned' && <Button size="small" onClick={() => setStatus(r.id, 'planned')}>Planifier</Button>}
           {r.status !== 'active' && <Button size="small" type="primary" ghost onClick={() => setStatus(r.id, 'active')}>Activer</Button>}
           {r.status !== 'revealed' && <Button size="small" onClick={() => setStatus(r.id, 'revealed')}>Révéler</Button>}

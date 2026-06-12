@@ -1,10 +1,19 @@
 // data_providers.dart — read providers backed by the API (mock fallback).
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config.dart';
 import '../data/mock_data.dart';
 import '../engine/mosaic_engine.dart';
 import '../models/game_models.dart';
 import 'api_provider.dart';
+
+/// Photo URLs returned by the API are relative (`/api/v1/photos/file/:id`) so
+/// the same DB row works for browser, mobile and tests. Prepend the API base
+/// when handing the URL to Image.network.
+String absolutePhotoUrl(String url) {
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return '${AppConfig.apiBaseUrl}$url';
+}
 
 // ── Current week's artwork (cells) — drives the mosaic from the API ─────────
 final artworkDataProvider = FutureProvider<ArtworkData>((ref) async {
@@ -82,6 +91,68 @@ class FilledInfo {
   final String? contributionId; // null when from mock / no id
   const FilledInfo(this.pseudo, this.score, this.contributionId);
 }
+
+// ── Mystery bet options (titles to pick from) ───────────────────────────────
+final betOptionsProvider = FutureProvider<List<BetOption>>((ref) async {
+  if (!ref.watch(useApiProvider)) return MockData.betOptions;
+  try {
+    final rows = await ref.watch(apiClientProvider).guessOptions();
+    if (rows.isEmpty) return MockData.betOptions;
+    return rows.map((r) {
+      final m = r as Map<String, dynamic>;
+      return BetOption(
+        (m['id'] as String?) ?? '',
+        (m['title'] as String?) ?? '—',
+        (m['artist'] as String?) ?? '',
+        (m['year'] as num?)?.toInt() ?? 0,
+      );
+    }).toList();
+  } catch (_) {
+    return MockData.betOptions;
+  }
+});
+
+// ── Claims (variantKey → pseudo of who took it) ─────────────────────────────
+final claimsProvider = FutureProvider.family<Map<String, String>, String>((ref, instanceId) async {
+  if (!ref.watch(useApiProvider) || instanceId.isEmpty) return const {};
+  try {
+    final rows = await ref.watch(apiClientProvider).claims(instanceId);
+    final out = <String, String>{};
+    for (final r in rows) {
+      final m = r as Map<String, dynamic>;
+      final vk = m['variantKey'] as String?;
+      if (vk != null) out[vk] = (m['pseudo'] as String?) ?? 'Anonyme';
+    }
+    return out;
+  } catch (_) {
+    return const {};
+  }
+});
+
+// ── Real photo gallery for an instance ──────────────────────────────────────
+final instancePhotosProvider = FutureProvider.family<List<InstancePhoto>, String>((ref, instanceId) async {
+  if (!ref.watch(useApiProvider) || instanceId.isEmpty) return const [];
+  try {
+    final art = await ref.watch(apiClientProvider).instanceArtwork(instanceId);
+    final out = <InstancePhoto>[];
+    for (final f in (art['filled'] as List? ?? const [])) {
+      final m = f as Map;
+      final url = m['url'] as String?;
+      if (url == null || url.isEmpty) continue;
+      out.add(InstancePhoto(
+        contributionId: (m['contributionId'] as String?) ?? '',
+        url: absolutePhotoUrl(url),
+        pseudo: (m['pseudo'] as String?) ?? '—',
+        pig: (m['pig'] as String?) ?? 'ardoise',
+        variantKey: (m['variantKey'] as String?) ?? '',
+        deltaE: (m['deltaE'] as num?)?.toDouble() ?? 30,
+      ));
+    }
+    return out;
+  } catch (_) {
+    return const [];
+  }
+});
 
 final instanceFillProvider = FutureProvider.family<Map<String, FilledInfo>, String>((ref, instanceId) async {
   Map<String, FilledInfo> mock() =>

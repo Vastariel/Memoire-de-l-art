@@ -121,3 +121,22 @@ class BlockContribution {
   final int score;
   const BlockContribution(this.pseudo, this.date, this.score);
 }
+
+/// Photo contribuée dans une instance (galerie partagée).
+class InstancePhoto {
+  final String contributionId;
+  final String url;          // URL absolue prête à passer à Image.network
+  final String pseudo;
+  final String pig;
+  final String variantKey;
+  final double deltaE;
+  const InstancePhoto({
+    required this.contributionId,
+    required this.url,
+    required this.pseudo,
+    required this.pig,
+    required this.variantKey,
+    required this.deltaE,
+  });
+  int get score => (100 - deltaE).clamp(0, 100).round();
+}

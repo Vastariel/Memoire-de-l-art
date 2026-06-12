@@ -41,6 +41,7 @@ export const App: React.FC = () => {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/artworks" element={<ArtworksList />} />
                   <Route path="/artworks/new" element={<ArtworkBuilder />} />
+                  <Route path="/artworks/:id/edit" element={<ArtworkBuilder />} />
                   <Route path="/gallery" element={<Gallery />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

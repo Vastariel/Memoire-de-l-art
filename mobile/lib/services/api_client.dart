@@ -97,6 +97,10 @@ class ApiClient {
     await _dio.post('/claims', data: {'instanceId': instanceId, 'variantKey': variantKey});
   }
 
+  Future<List<dynamic>> claims(String instanceId) async =>
+      ((await _dio.get('/claims', queryParameters: {'instanceId': instanceId})).data as Map<String, dynamic>)['claims']
+          as List<dynamic>;
+
   Future<Map<String, dynamic>> submitPhoto({
     required String filePath,
     required int day,
@@ -119,6 +123,9 @@ class ApiClient {
   Future<void> placeGuess(String titleGuess) async {
     await _dio.post('/guesses', data: {'titleGuess': titleGuess});
   }
+
+  Future<List<dynamic>> guessOptions() async =>
+      ((await _dio.get('/guesses/options')).data as Map<String, dynamic>)['options'] as List<dynamic>;
 
   Future<void> reactToContribution(String contributionId, String stamp) async {
     await _dio.post('/contributions/$contributionId/reactions', data: {'stamp': stamp});

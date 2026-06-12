@@ -33,6 +33,7 @@ class _InstanceDetailScreenState extends ConsumerState<InstanceDetailScreen> {
     final inst = g.instances.firstWhere((i) => i.id == widget.instanceId, orElse: () => g.instances.first);
     final lb = ref.watch(leaderboardProvider(widget.instanceId)).valueOrNull;
     final ranked = [...(lb ?? MockData.members)]..sort((a, b) => b.points.compareTo(a.points));
+    final photos = ref.watch(instancePhotosProvider(widget.instanceId)).valueOrNull ?? const [];
 
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
@@ -73,6 +74,8 @@ class _InstanceDetailScreenState extends ConsumerState<InstanceDetailScreen> {
               _tabBtn('rank', t.weeklyTab),
               const SizedBox(width: 8),
               _tabBtn('members', t.membersTab),
+              const SizedBox(width: 8),
+              _tabBtn('photos', 'Photos'),
             ]),
           ),
           const SizedBox(height: 12),
@@ -82,12 +85,17 @@ class _InstanceDetailScreenState extends ConsumerState<InstanceDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 9),
                 child: LeaderRow(rank: i + 1, entry: ranked[i]),
               )
-          else
+          else if (_tab == 'members')
             for (final m in ranked)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 9),
                 child: _MemberRow(entry: m),
-              ),
+              )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _PhotosGrid(photos: photos),
+            ),
         ],
       ],
     );
@@ -112,6 +120,51 @@ class _InstanceDetailScreenState extends ConsumerState<InstanceDetailScreen> {
   void _invite(InstanceSummary inst) {
     final t = L10n.of(context);
     showMdaSheet(context, builder: (ctx) => _InviteSheet(inst: inst, t: t));
+  }
+}
+
+class _PhotosGrid extends StatelessWidget {
+  final List<InstancePhoto> photos;
+  const _PhotosGrid({required this.photos});
+
+  @override
+  Widget build(BuildContext context) {
+    if (photos.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Text('Aucune photo pour l\'instant.',
+            textAlign: TextAlign.center, style: MdaType.sans(size: 13.5, color: context.fg3)),
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: photos.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3, crossAxisSpacing: 6, mainAxisSpacing: 6, childAspectRatio: 0.85),
+      itemBuilder: (_, i) {
+        final p = photos[i];
+        return ClipRRect(
+          borderRadius: MdaRadius.bSm,
+          child: Stack(fit: StackFit.expand, children: [
+            Image.network(p.url, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: context.surfaceSunk)),
+            Positioned(
+              left: 4, right: 4, bottom: 4,
+              child: Row(children: [
+                Expanded(
+                  child: Text(p.pseudo,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: MdaType.sans(size: 10.5, weight: FontWeight.w600, color: Colors.white)),
+                ),
+                Text('${p.score}',
+                    style: MdaType.sans(size: 10.5, weight: FontWeight.w600, color: Colors.white)),
+              ]),
+            ),
+          ]),
+        );
+      },
+    );
   }
 }
 

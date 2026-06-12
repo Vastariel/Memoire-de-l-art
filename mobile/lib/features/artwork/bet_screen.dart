@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../data/mock_data.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/data_providers.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/palette.dart';
 import '../../theme/theme.dart';
@@ -27,6 +28,7 @@ class _BetScreenState extends ConsumerState<BetScreen> {
   Widget build(BuildContext context) {
     final t = L10n.of(context);
     final g = ref.watch(gameProvider);
+    final options = ref.watch(betOptionsProvider).valueOrNull ?? MockData.betOptions;
 
     return Scaffold(
       backgroundColor: context.paper,
@@ -58,7 +60,7 @@ class _BetScreenState extends ConsumerState<BetScreen> {
                   Expanded(child: Text(t.betPointsHint, style: MdaType.sans(size: 12.5, color: context.fg2))),
                 ]),
                 const SizedBox(height: 14),
-                for (final o in MockData.betOptions) ...[
+                for (final o in options) ...[
                   _OptionRow(
                     title: o.title,
                     subtitle: '${o.artist} · ${o.year}',
@@ -80,7 +82,7 @@ class _BetScreenState extends ConsumerState<BetScreen> {
                 onTap: _pick == null
                     ? null
                     : () {
-                        final title = MockData.betOptions.firstWhere((o) => o.id == _pick).title;
+                        final title = options.firstWhere((o) => o.id == _pick).title;
                         ref.read(gameProvider.notifier).placeBet(title);
                         context.pop();
                       },

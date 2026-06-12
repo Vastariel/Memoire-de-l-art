@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Card, Row, Col, Slider, InputNumber, Form, Input, Select, Button, Upload, Typography,
+  Alert, Card, Row, Col, Slider, InputNumber, Form, Input, Select, Button, Upload, Typography,
   Divider, Space, Tag, message,
 } from 'antd';
 import { InboxOutlined, UploadOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
+import { useParams } from 'react-router-dom';
 import { FAMILIES, VARIANTS } from '../lib/palette';
 import { drawCrop, rebalanceByDay, renderPreview, type Cell, type CropParams } from '../lib/pixelize';
 import { fetchArtworkFromUrl, loadImage } from '../lib/wikimedia';
@@ -25,6 +26,8 @@ function isoWeekNow(): { year: number; week: number } {
 }
 
 export const ArtworkBuilder: React.FC = () => {
+  const { id: editId } = useParams<{ id: string }>();
+  const isEdit = !!editId;
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [crop, setCrop] = useState<CropParams>({ zoom: 1, offsetX: 0, offsetY: 0 });
   const [cols, setCols] = useState(12);
@@ -36,12 +39,43 @@ export const ArtworkBuilder: React.FC = () => {
   const [publishing, setPublishing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [wikiUrl, setWikiUrl] = useState('');
+  const [loadingEdit, setLoadingEdit] = useState(false);
   const [form] = Form.useForm();
 
   const gridRef = useRef<HTMLCanvasElement>(document.createElement('canvas'));
   const previewRef = useRef<HTMLCanvasElement>(null);
 
   const iso = useMemo(isoWeekNow, []);
+
+  // ── Edit mode: load the existing artwork once ────────────────────────────
+  useEffect(() => {
+    if (!editId) return;
+    let cancelled = false;
+    setLoadingEdit(true);
+    api.getArtwork(editId).then(a => {
+      if (cancelled) return;
+      setCols(a.cols); setRows(a.rows);
+      setCells((a.cells as unknown as Cell[]) ?? []);
+      const dayMap: Record<string, number> = {};
+      for (const f of a.families ?? []) dayMap[f.key] = f.day;
+      if (Object.keys(dayMap).length) setDayByFamily(dayMap);
+      form.setFieldsValue({
+        titleFr: a.titleFr, titleEn: a.titleEn, artist: a.artist, year: a.year,
+        descriptionFr: a.descriptionFr, descriptionEn: a.descriptionEn,
+        sourceLicense: a.sourceLicense, isoYear: a.isoYear, isoWeek: a.isoWeek, status: a.status,
+      });
+    }).catch(() => message.error('Impossible de charger l\'œuvre.'))
+      .finally(() => { if (!cancelled) setLoadingEdit(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
+
+  // Re-render the preview when cells change without an image (edit mode).
+  useEffect(() => {
+    if (img) return;
+    if (cells.length === 0 || !previewRef.current) return;
+    renderPreview(previewRef.current, cells, cols, rows);
+  }, [cells, cols, rows, img]);
 
   // Recompute cells + preview whenever the image, crop, grid or day mapping
   // changes. Cells are rebalanced so each family fills a quota ∝ its assigned
@@ -104,11 +138,11 @@ export const ArtworkBuilder: React.FC = () => {
     } catch {
       return;
     }
-    if (!img || cells.length === 0) { message.error('Importe d\'abord une image.'); return; }
+    if (cells.length === 0) { message.error('Importe d\'abord une image.'); return; }
     const days = Object.values(dayByFamily).sort((a, b) => a - b);
     if (days.join() !== '1,2,3,4,5,6,7') { message.error('Chaque jour (1→7) doit être attribué à une famille distincte.'); return; }
 
-    const id = `w${meta.isoYear}-${String(meta.isoWeek).padStart(2, '0')}`;
+    const id = editId ?? `w${meta.isoYear}-${String(meta.isoWeek).padStart(2, '0')}`;
     setPublishing(true);
     try {
       await api.createArtwork({
@@ -138,8 +172,18 @@ export const ArtworkBuilder: React.FC = () => {
 
   return (
     <div style={{ padding: 24 }}>
-      <Title level={3}>Nouvelle œuvre</Title>
+      <Title level={3}>{isEdit ? `Modifier · ${editId}` : 'Nouvelle œuvre'}</Title>
       <Text type="secondary">Image du domaine public uniquement — la source/licence est obligatoire.</Text>
+      {isEdit && !img && (
+        <Alert
+          style={{ marginTop: 12 }}
+          type="info"
+          showIcon
+          message="Mode édition"
+          description="Les cellules existantes sont chargées. Re-importe une image pour re-pixelliser ; sinon, seuls les métadonnées et la planification seront mis à jour."
+        />
+      )}
+      {loadingEdit && <Alert style={{ marginTop: 12 }} type="info" message="Chargement de l'œuvre…" />}
 
       <Row gutter={24} style={{ marginTop: 16 }}>
         {/* ── Left: image + crop + pixelisation ── */}
@@ -255,8 +299,9 @@ export const ArtworkBuilder: React.FC = () => {
               </Form.Item>
             </Col>
           </Row>
-          <Button type="primary" icon={<UploadOutlined />} loading={publishing} disabled={!img} onClick={publish}>
-            Enregistrer l'œuvre
+          <Button type="primary" icon={<UploadOutlined />} loading={publishing}
+            disabled={!img && cells.length === 0} onClick={publish}>
+            {isEdit ? 'Enregistrer les modifications' : 'Enregistrer l\'œuvre'}
           </Button>
         </Form>
       </Card>

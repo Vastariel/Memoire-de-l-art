@@ -54,6 +54,37 @@ export async function adminRoutes(app: FastifyInstance) {
     });
   });
 
+  // Full artwork payload for the builder edit screen (metadata + cells + palette).
+  app.get('/artworks/:id', { onRequest: [requireAdmin] }, async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const a = await db.query(
+      `SELECT id, title_fr, title_en, artist, year_, description_fr, description_en,
+              source_license, cols, rows, cells, hd_url, status, iso_year, iso_week
+       FROM artworks WHERE id = $1`,
+      [id],
+    );
+    if (a.rows.length === 0) return reply.code(404).send({ error: 'Œuvre introuvable.' });
+    const [fams, vars] = await Promise.all([
+      db.query(`SELECT key, day_, name_fr, name_en FROM color_families WHERE artwork_id = $1`, [id]),
+      db.query(`SELECT key, family_key, name_fr, name_en, hex FROM color_variants WHERE artwork_id = $1`, [id]),
+    ]);
+    const row = a.rows[0]!;
+    return reply.send({
+      artwork: {
+        id: row.id,
+        titleFr: row.title_fr, titleEn: row.title_en,
+        artist: row.artist, year: row.year_,
+        descriptionFr: row.description_fr, descriptionEn: row.description_en,
+        sourceLicense: row.source_license,
+        cols: row.cols, rows: row.rows,
+        cells: row.cells, hdUrl: row.hd_url,
+        status: row.status, isoYear: row.iso_year, isoWeek: row.iso_week,
+        families: fams.rows.map(f => ({ key: f.key, day: f.day_, nameFr: f.name_fr, nameEn: f.name_en })),
+        variants: vars.rows.map(v => ({ key: v.key, familyKey: v.family_key, nameFr: v.name_fr, nameEn: v.name_en, hex: v.hex })),
+      },
+    });
+  });
+
   app.get('/artworks', { onRequest: [requireAdmin] }, async (_req, reply) => {
     const rows = await db.query(
       `SELECT id, title_fr, artist, year_, status, iso_year, iso_week, created_at

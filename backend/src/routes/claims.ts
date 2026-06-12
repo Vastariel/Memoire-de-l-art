@@ -11,7 +11,27 @@ const schema = z.object({
   variantKey: z.string().min(1),
 });
 
+const listSchema = z.object({ instanceId: z.string().uuid() });
+
 export async function claimRoutes(app: FastifyInstance) {
+  // List who claimed which variant in this instance for the current artwork.
+  app.get('/', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { instanceId } = listSchema.parse(req.query ?? {});
+    const a = await currentArtwork();
+    if (!a) return reply.send({ claims: [] });
+    const rows = await db.query<{ variant_key: string; user_id: string; pseudo: string | null; day_: number }>(
+      `SELECT c.variant_key, c.user_id, c.day_, u.pseudo
+       FROM claims c JOIN app_users u ON u.id = c.user_id
+       WHERE c.instance_id = $1 AND c.artwork_id = $2`,
+      [instanceId, a.id],
+    );
+    return reply.send({
+      claims: rows.rows.map(r => ({
+        variantKey: r.variant_key, userId: r.user_id, day: r.day_, pseudo: r.pseudo ?? 'Anonyme',
+      })),
+    });
+  });
+
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { userId } = req.user as JwtPayload;
     const { instanceId, variantKey } = schema.parse(req.body);

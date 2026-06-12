@@ -19,7 +19,7 @@ export const Dashboard: React.FC = () => {
 
       {isLoading ? <Spin /> : stats && (
         <Row gutter={16}>
-          <Col span={6}><Card><Statistic title="Instances" value={stats.instances} prefix={<TeamOutlined />} /></Card></Col>
+          <Col span={6}><Card><Statistic title="Ateliers" value={stats.instances} prefix={<TeamOutlined />} /></Card></Col>
           <Col span={6}><Card><Statistic title="Joueurs" value={stats.users} prefix={<TeamOutlined />} /></Card></Col>
           <Col span={6}><Card><Statistic title="Photos aujourd'hui" value={stats.photosToday} prefix={<CameraOutlined />} /></Card></Col>
           <Col span={6}><Card><Statistic title="Semaines planifiées" value={stats.weeksPlanned} prefix={<CalendarOutlined />} /></Card></Col>

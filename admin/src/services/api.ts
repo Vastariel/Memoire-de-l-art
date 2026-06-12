@@ -68,6 +68,9 @@ export interface ArtworkPayload {
 export const api = {
   stats: () => http.get<Stats>('/stats').then(r => r.data),
   artworks: () => http.get<{ artworks: AdminArtwork[] }>('/artworks').then(r => r.data.artworks),
+  getArtwork: (id: string) =>
+    http.get<{ artwork: ArtworkPayload & { titleFr?: string; titleEn?: string; artist?: string; year?: number;
+      descriptionFr?: string; descriptionEn?: string; sourceLicense?: string; } }>(`/artworks/${id}`).then(r => r.data.artwork),
   createArtwork: (p: ArtworkPayload) => http.post<{ ok: boolean; id: string }>('/artworks', p).then(r => r.data),
   setStatus: (id: string, status: ArtworkStatus) =>
     http.post(`/artworks/${id}/status`, { status }).then(r => r.data),

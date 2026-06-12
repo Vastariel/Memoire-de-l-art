@@ -21,7 +21,7 @@ export const Gallery: React.FC = () => {
   return (
     <div style={{ padding: 24 }}>
       <Title level={3}>Galerie & modération</Title>
-      <Text type="secondary">Photos envoyées (toutes instances). Supprimer une photo retire sa contribution.</Text>
+      <Text type="secondary">Photos envoyées (tous ateliers). Supprimer une photo retire sa contribution.</Text>
 
       {isLoading ? <Spin style={{ display: 'block', marginTop: 40 }} /> :
         !data || data.length === 0 ? <Empty style={{ marginTop: 40 }} description="Aucune photo pour l'instant." /> : (
