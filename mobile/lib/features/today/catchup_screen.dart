@@ -49,9 +49,9 @@ class CatchupScreen extends ConsumerWidget {
                   )
                 else
                   for (final f in missed) ...[
-                    _MissedRow(family: f, lang: lang, onTap: () {
-                      ref.read(gameProvider.notifier).setCaptureTask(g.tasks.first);
-                      context.push('/camera');
+                    _MissedRow(family: f, lang: lang, onTap: () async {
+                      await ref.read(gameProvider.notifier).setCatchupTask(f);
+                      if (context.mounted) context.push('/camera');
                     }),
                     const SizedBox(height: 11),
                   ],

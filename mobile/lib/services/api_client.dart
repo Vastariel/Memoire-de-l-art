@@ -79,6 +79,32 @@ class ApiClient {
 
   Future<Map<String, dynamic>> me({String lang = 'fr'}) async => (await _dio.get('/me')).data as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> updateMe({
+    String? pseudo,
+    String? locale,
+    int? notifHour,
+    int? notifMinute,
+    String? fcmToken,
+  }) async {
+    final body = <String, dynamic>{
+      if (pseudo != null) 'pseudo': pseudo,
+      if (locale != null) 'locale': locale,
+      if (notifHour != null) 'notifHour': notifHour,
+      if (notifMinute != null) 'notifMinute': notifMinute,
+      if (fcmToken != null) 'fcmToken': fcmToken,
+    };
+    return ((await _dio.patch('/me', data: body)).data as Map<String, dynamic>)['user'] as Map<String, dynamic>;
+  }
+
+  /// RGPD — full account export (JSON). Returned as a decoded map.
+  Future<Map<String, dynamic>> exportData() async =>
+      (await _dio.get('/me/export')).data as Map<String, dynamic>;
+
+  /// RGPD — erase the account (cascade-deletes photos & contributions).
+  Future<void> deleteAccount() async {
+    await _dio.delete('/me');
+  }
+
   Future<List<dynamic>> collection({String lang = 'fr'}) async =>
       ((await _dio.get('/me/collection', queryParameters: {'lang': lang})).data as Map<String, dynamic>)['collection']
           as List<dynamic>;

@@ -23,6 +23,10 @@ class GameState {
   final List<DailyTask> tasks;
   // transitoire (capture en cours)
   final String? captureTaskId;
+  // transitoire (rattrapage en cours) — famille d'un jour passé
+  final String? catchupFamily;
+  final int catchupDay;
+  final String? catchupVariant;
   final int lastScore;
   final int lastPoints;
   final String? lastError;
@@ -40,10 +44,15 @@ class GameState {
     required this.activeInstanceId,
     required this.tasks,
     this.captureTaskId,
+    this.catchupFamily,
+    this.catchupDay = 0,
+    this.catchupVariant,
     this.lastScore = 0,
     this.lastPoints = 0,
     this.lastError,
   });
+
+  bool get isCatchup => catchupFamily != null;
 
   factory GameState.initial() => GameState(
         week: MockData.week,
@@ -96,6 +105,10 @@ class GameState {
     bool clearBet = false,
     List<DailyTask>? tasks,
     String? captureTaskId,
+    String? catchupFamily,
+    int? catchupDay,
+    String? catchupVariant,
+    bool clearCatchup = false,
     int? lastScore,
     int? lastPoints,
     String? lastError,
@@ -114,6 +127,9 @@ class GameState {
         activeInstanceId: activeInstanceId,
         tasks: tasks ?? this.tasks,
         captureTaskId: captureTaskId ?? this.captureTaskId,
+        catchupFamily: clearCatchup ? null : (catchupFamily ?? this.catchupFamily),
+        catchupDay: clearCatchup ? 0 : (catchupDay ?? this.catchupDay),
+        catchupVariant: clearCatchup ? null : (catchupVariant ?? this.catchupVariant),
         lastScore: lastScore ?? this.lastScore,
         lastPoints: lastPoints ?? this.lastPoints,
         lastError: clearError ? null : (lastError ?? this.lastError),
@@ -206,7 +222,34 @@ class GameNotifier extends StateNotifier<GameState> {
     }
   }
 
-  void setCaptureTask(DailyTask task) => state = state.copyWith(captureTaskId: task.id);
+  void setCaptureTask(DailyTask task) =>
+      state = state.copyWith(captureTaskId: task.id, clearCatchup: true);
+
+  /// Rattrapage : prépare la capture pour une famille d'un jour passé.
+  /// Choisit la variante déjà réclamée dans cette famille (instance active),
+  /// sinon la variante médiane par défaut.
+  Future<void> setCatchupTask(String family) async {
+    final fam = kFamilies[family];
+    if (fam == null) return;
+    var variant = fam.variants.length > 1 ? fam.variants[1] : fam.variants.first;
+    if (_useApi && state.activeInstanceId.isNotEmpty) {
+      try {
+        final claims = await _api.claims(state.activeInstanceId);
+        for (final c in claims) {
+          final vk = (c as Map)['variantKey'] as String?;
+          if (vk != null && kVariants[vk]?.family == family) {
+            variant = vk;
+            break;
+          }
+        }
+      } catch (_) {/* fall back to default variant */}
+    }
+    state = state.copyWith(
+      catchupFamily: family,
+      catchupDay: fam.day,
+      catchupVariant: variant,
+    );
+  }
 
   /// Capture done. Online + a real photo file → upload it (server computes
   /// ΔE/variance/score/points). Otherwise use the simulated score.
@@ -220,14 +263,17 @@ class GameNotifier extends StateNotifier<GameState> {
       err = 'Aucune instance active — crée ou rejoins une instance.';
     } else {
       final task = state.currentTask;
-      final sep = task?.isSeparate ?? false;
+      final sep = !state.isCatchup && (task?.isSeparate ?? false);
       try {
         final r = await _api.submitPhoto(
           filePath: photoPath,
-          day: state.weekDay,
-          variantKey: task?.variant ?? state.myVariant,
+          day: state.isCatchup ? state.catchupDay : state.weekDay,
+          variantKey: state.isCatchup
+              ? (state.catchupVariant ?? state.myVariant)
+              : (task?.variant ?? state.myVariant),
           shared: !sep,
           separateInstanceId: sep ? task?.instanceId : null,
+          catchup: state.isCatchup,
         );
         _uploadedOnline = true;
         state = state.copyWith(
@@ -256,6 +302,21 @@ class GameNotifier extends StateNotifier<GameState> {
   /// Validate the contribution. Online → just refresh from the server (the
   /// upload already created the contribution & points). Offline → optimistic.
   Future<void> confirmDone() async {
+    // Rattrapage : pas de tâche du jour — marque la famille couverte.
+    if (state.isCatchup) {
+      final fam = state.catchupFamily!;
+      if (_uploadedOnline) {
+        state = state.copyWith(clearCatchup: true);
+        await loadFromApi();
+      } else {
+        state = state.copyWith(
+          filled: {...state.filled, fam},
+          points: state.points + state.lastPoints,
+          clearCatchup: true,
+        );
+      }
+      return;
+    }
     final task = state.currentTask;
     if (task == null) return;
     final tasks = state.tasks.map((t) => t.id == task.id ? t.copyWith(done: true) : t).toList();

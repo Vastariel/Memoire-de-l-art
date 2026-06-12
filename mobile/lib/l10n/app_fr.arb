@@ -172,5 +172,14 @@
   "privacyPolicy": "Politique de confidentialité",
   "exportData": "Exporter mes données",
   "deleteAccount": "Supprimer mon compte",
-  "signOut": "Se déconnecter"
+  "signOut": "Se déconnecter",
+  "reminderTime": "Heure du rappel",
+  "renameTitle": "Ton pseudo",
+  "save": "Enregistrer",
+  "cancel": "Annuler",
+  "delete": "Supprimer",
+  "exportDone": "Données exportées",
+  "exportFailed": "Export impossible",
+  "deleteAccountTitle": "Supprimer le compte ?",
+  "deleteAccountBody": "Tes photos et contributions seront effacées définitivement. Cette action est irréversible."
 }

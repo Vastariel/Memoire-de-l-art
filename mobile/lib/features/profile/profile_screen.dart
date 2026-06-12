@@ -37,7 +37,14 @@ class ProfileScreen extends ConsumerWidget {
         Column(children: [
           MdaAvatar(pig: MockData.myPig, initial: pseudo.isNotEmpty ? pseudo[0] : 'C', size: 84, ring: 2),
           const SizedBox(height: 10),
-          Text(pseudo, style: MdaType.serif(size: 24, weight: FontWeight.w500, color: context.fg1)),
+          GestureDetector(
+            onTap: () => _editPseudo(context, ref, pseudo),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(pseudo, style: MdaType.serif(size: 24, weight: FontWeight.w500, color: context.fg1)),
+              const SizedBox(width: 7),
+              MdaIcon('user', size: 15, color: context.fg3),
+            ]),
+          ),
           Text(t.memberSince(lang == 'en' ? 'March' : 'mars'), style: MdaType.sans(size: 13, color: context.fg2)),
         ]),
         // stats
@@ -106,6 +113,25 @@ class ProfileScreen extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  Future<void> _editPseudo(BuildContext context, WidgetRef ref, String current) async {
+    final t = L10n.of(context);
+    final ctrl = TextEditingController(text: current);
+    final next = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t.renameTitle),
+        content: TextField(controller: ctrl, autofocus: true, maxLength: 32),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t.cancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: Text(t.save)),
+        ],
+      ),
+    );
+    if (next != null && next.trim().isNotEmpty && next.trim() != current) {
+      await ref.read(authProvider.notifier).updatePseudo(next);
+    }
   }
 
   Widget _stat(BuildContext context, String value, String label, String icon) {

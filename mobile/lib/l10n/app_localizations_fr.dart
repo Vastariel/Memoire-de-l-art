@@ -563,4 +563,32 @@ class L10nFr extends L10n {
 
   @override
   String get signOut => 'Se déconnecter';
+
+  @override
+  String get reminderTime => 'Heure du rappel';
+
+  @override
+  String get renameTitle => 'Ton pseudo';
+
+  @override
+  String get save => 'Enregistrer';
+
+  @override
+  String get cancel => 'Annuler';
+
+  @override
+  String get delete => 'Supprimer';
+
+  @override
+  String get exportDone => 'Données exportées';
+
+  @override
+  String get exportFailed => 'Export impossible';
+
+  @override
+  String get deleteAccountTitle => 'Supprimer le compte ?';
+
+  @override
+  String get deleteAccountBody =>
+      'Tes photos et contributions seront effacées définitivement. Cette action est irréversible.';
 }

@@ -26,6 +26,14 @@ class ArtworkScreen extends ConsumerStatefulWidget {
 
 class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
   double _zoom = 0;
+  final _tc = TransformationController();
+  double _scale = 1.0;
+
+  @override
+  void dispose() {
+    _tc.dispose();
+    super.dispose();
+  }
 
   void _showBlock(ArtCell cell, String lang) {
     final v = kVariants[cell.variant]!;
@@ -91,14 +99,22 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
             ClipRRect(
               borderRadius: MdaRadius.bMd,
               child: Stack(children: [
-                Transform.scale(
-                  scale: 1 + _zoom * 1.35,
-                  alignment: const Alignment(0.16, -0.36),
+                InteractiveViewer(
+                  transformationController: _tc,
+                  minScale: 1.0,
+                  maxScale: 8.0,
+                  boundaryMargin: const EdgeInsets.all(40),
+                  panEnabled: true,
+                  scaleEnabled: true,
+                  onInteractionUpdate: (_) {
+                    final s = _tc.value.getMaxScaleOnAxis();
+                    if ((s - _scale).abs() > 0.01) setState(() => _scale = s);
+                  },
                   child: MosaicWidget(
                     filled: g.filled,
                     todayFamily: g.todayFamily,
                     vitrail: _zoom,
-                    pulse: _zoom < 0.3,
+                    pulse: _zoom < 0.3 && _scale < 1.05,
                     artwork: artwork,
                     onTapCell: (cell, isFilled) {
                       if (isFilled) _showBlock(cell, lang);
@@ -119,6 +135,27 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
                     ]),
                   ),
                 ),
+                if (_scale > 1.05)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: GestureDetector(
+                      onTap: () => setState(() {
+                        _tc.value = Matrix4.identity();
+                        _scale = 1.0;
+                      }),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                        decoration: BoxDecoration(color: const Color(0x6B000000), borderRadius: BorderRadius.circular(999)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const MdaIcon('minus', size: 14, color: Colors.white),
+                          const SizedBox(width: 6),
+                          Text('${_scale.toStringAsFixed(1)}×',
+                              style: MdaType.sans(size: 11, weight: FontWeight.w600, letterSpacing: 0.4, color: Colors.white)),
+                        ]),
+                      ),
+                    ),
+                  ),
               ]),
             ),
             const SizedBox(height: 10),

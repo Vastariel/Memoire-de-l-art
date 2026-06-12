@@ -198,5 +198,14 @@
   "privacyPolicy": "Privacy policy",
   "exportData": "Export my data",
   "deleteAccount": "Delete my account",
-  "signOut": "Sign out"
+  "signOut": "Sign out",
+  "reminderTime": "Reminder time",
+  "renameTitle": "Your nickname",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "exportDone": "Data exported",
+  "exportFailed": "Export failed",
+  "deleteAccountTitle": "Delete account?",
+  "deleteAccountBody": "Your photos and contributions will be permanently erased. This cannot be undone."
 }

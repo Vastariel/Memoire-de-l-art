@@ -557,4 +557,32 @@ class L10nEn extends L10n {
 
   @override
   String get signOut => 'Sign out';
+
+  @override
+  String get reminderTime => 'Reminder time';
+
+  @override
+  String get renameTitle => 'Your nickname';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get delete => 'Delete';
+
+  @override
+  String get exportDone => 'Data exported';
+
+  @override
+  String get exportFailed => 'Export failed';
+
+  @override
+  String get deleteAccountTitle => 'Delete account?';
+
+  @override
+  String get deleteAccountBody =>
+      'Your photos and contributions will be permanently erased. This cannot be undone.';
 }

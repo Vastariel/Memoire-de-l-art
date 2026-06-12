@@ -36,6 +36,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void setPseudo(String pseudo) =>
       state = state.copyWith(pseudo: pseudo.trim().isEmpty ? 'Toi' : pseudo.trim());
 
+  /// Rename the signed-in user — updates local state and persists via PATCH /me.
+  Future<void> updatePseudo(String pseudo) async {
+    final p = pseudo.trim().isEmpty ? 'Toi' : pseudo.trim();
+    state = state.copyWith(pseudo: p);
+    if (_useApi && online) {
+      try {
+        await _api.updateMe(pseudo: p);
+      } catch (_) {/* keep optimistic local pseudo */}
+    }
+  }
+
+  /// RGPD erasure — delete the account server-side, then reset to signed-out.
+  Future<void> deleteAccount() async {
+    if (_useApi && online) {
+      try {
+        await _api.deleteAccount();
+      } catch (_) {/* fall through — still clear local session */}
+    }
+    try {
+      await _api.clearToken();
+    } catch (_) {}
+    state = const AuthState();
+  }
+
+  bool get online => state.online;
+
   /// Finish onboarding (join/create) — authenticate, with offline fallback.
   Future<void> completeOnboarding({String? pseudo, bool consent = true}) async {
     final p = (pseudo != null && pseudo.trim().isNotEmpty) ? pseudo.trim() : state.pseudo;
