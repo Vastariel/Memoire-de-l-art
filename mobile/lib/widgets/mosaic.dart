@@ -5,6 +5,7 @@
 // permet d'afficher une œuvre créée dans l'admin et servie par l'API.
 
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../engine/mosaic_engine.dart';
 import '../theme/palette.dart';
@@ -20,6 +21,9 @@ class MosaicWidget extends StatefulWidget {
   final bool stagger;
   final ArtworkData? artwork; // null → moteur local (Semeur)
   final void Function(ArtCell cell, bool filled)? onTapCell;
+  // variantKey → URL absolue de la photo contribuée. Couche vitrail : ces
+  // photos sont peintes par cellule (recadrage cover) ; repli procédural sinon.
+  final Map<String, String> photos;
 
   const MosaicWidget({
     super.key,
@@ -33,6 +37,7 @@ class MosaicWidget extends StatefulWidget {
     this.stagger = false,
     this.artwork,
     this.onTapCell,
+    this.photos = const {},
   });
 
   @override
@@ -42,6 +47,12 @@ class MosaicWidget extends StatefulWidget {
 class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMixin {
   late final AnimationController _pulse;
   late final AnimationController _stagger;
+
+  // Photos décodées, indexées par URL (partagé entre variantes pointant le
+  // même cliché). Les streams sont retenus pour pouvoir se désabonner.
+  final Map<String, ui.Image> _decoded = {};
+  final Map<String, ImageStream> _streams = {};
+  final Map<String, ImageStreamListener> _listeners = {};
 
   ArtworkData get _art => widget.artwork ?? kArtwork;
 
@@ -55,6 +66,7 @@ class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMix
     } else {
       _stagger.value = 1;
     }
+    _syncPhotos();
   }
 
   @override
@@ -67,10 +79,32 @@ class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMix
     } else if (!widget.stagger && old.stagger) {
       _stagger.value = 1;
     }
+    if (widget.photos != old.photos) _syncPhotos();
+  }
+
+  /// Charge (réseau ou fichier) chaque URL pas encore décodée.
+  void _syncPhotos() {
+    final wanted = widget.photos.values.toSet();
+    for (final url in wanted) {
+      // Seules les URLs réseau sont peintes (web-safe, pas de dart:io) ; un
+      // chemin local retombe sur la couche procédurale.
+      if (!url.startsWith('http') || _streams.containsKey(url)) continue;
+      final stream = NetworkImage(url).resolve(const ImageConfiguration());
+      final listener = ImageStreamListener((info, _) {
+        if (!mounted) return;
+        setState(() => _decoded[url] = info.image);
+      }, onError: (_, __) {/* garde le repli procédural */});
+      _streams[url] = stream;
+      _listeners[url] = listener;
+      stream.addListener(listener);
+    }
   }
 
   @override
   void dispose() {
+    for (final e in _streams.entries) {
+      e.value.removeListener(_listeners[e.key]!);
+    }
     _pulse.dispose();
     _stagger.dispose();
     super.dispose();
@@ -89,6 +123,12 @@ class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final art = _art;
+    // variantKey → image décodée (uniquement celles déjà chargées).
+    final images = <String, ui.Image>{};
+    widget.photos.forEach((variant, url) {
+      final img = _decoded[url];
+      if (img != null) images[variant] = img;
+    });
     return AspectRatio(
       aspectRatio: art.cols / art.rows,
       child: LayoutBuilder(builder: (context, c) {
@@ -110,6 +150,7 @@ class _MosaicWidgetState extends State<MosaicWidget> with TickerProviderStateMix
               staggerT: widget.stagger ? _stagger.value : 1,
               emptyColor: context.mosaicEmpty,
               lineColor: context.line,
+              images: images,
             ),
           ),
         );
@@ -137,6 +178,7 @@ class _MosaicPainter extends CustomPainter {
   final double staggerT;
   final Color emptyColor;
   final Color lineColor;
+  final Map<String, ui.Image> images; // variantKey → photo décodée
 
   _MosaicPainter({
     required this.art,
@@ -151,6 +193,7 @@ class _MosaicPainter extends CustomPainter {
     required this.staggerT,
     required this.emptyColor,
     required this.lineColor,
+    required this.images,
   });
 
   @override
@@ -206,21 +249,40 @@ class _MosaicPainter extends CustomPainter {
       final full = Offset.zero & size;
       canvas.saveLayer(full, Paint()..color = Colors.white.withValues(alpha: vitrail.clamp(0, 1)));
       final shaders = <String, List<Shader>>{};
+      final imgPaint = Paint()..filterQuality = FilterQuality.medium;
       for (final c in art.cells) {
         final isFilled = revealAll || filled.contains(c.family);
         if (!isFilled) continue;
-        final layers = shaders.putIfAbsent(
-          c.family,
-          () => photoLayers(c.family).map((g) => g.createShader(full)).toList(),
-        );
         final r = cellRect(c);
         final rr = RRect.fromRectAndRadius(r, Radius.circular(radius));
-        for (final sh in layers) {
-          canvas.drawRRect(rr, Paint()..shader = sh);
+        final img = images[c.variant];
+        if (img != null) {
+          // Vraie photo de la variante : recadrage cover dans la cellule.
+          canvas.save();
+          canvas.clipRRect(rr);
+          canvas.drawImageRect(img, _coverSrc(img, r.size), r, imgPaint);
+          canvas.restore();
+        } else {
+          // Repli procédural (aucune photo contribuée pour cette variante).
+          final layers = shaders.putIfAbsent(
+            c.family,
+            () => photoLayers(c.family).map((g) => g.createShader(full)).toList(),
+          );
+          for (final sh in layers) {
+            canvas.drawRRect(rr, Paint()..shader = sh);
+          }
         }
       }
       canvas.restore();
     }
+  }
+
+  /// Rect source (dans l'image) pour un rendu « cover » d'aspect [dst].
+  Rect _coverSrc(ui.Image img, Size dst) {
+    final iw = img.width.toDouble(), ih = img.height.toDouble();
+    final scale = math.max(dst.width / iw, dst.height / ih);
+    final sw = dst.width / scale, sh = dst.height / scale;
+    return Rect.fromLTWH((iw - sw) / 2, (ih - sh) / 2, sw, sh);
   }
 
   @override
@@ -231,7 +293,16 @@ class _MosaicPainter extends CustomPainter {
       old.staggerT != staggerT ||
       old.todayFamily != todayFamily ||
       !_setEq(old.filled, filled) ||
-      old.revealAll != revealAll;
+      old.revealAll != revealAll ||
+      !_imgEq(old.images, images);
+}
+
+bool _imgEq(Map<String, ui.Image> a, Map<String, ui.Image> b) {
+  if (a.length != b.length) return false;
+  for (final e in a.entries) {
+    if (b[e.key] != e.value) return false;
+  }
+  return true;
 }
 
 bool _setEq(Set<String> a, Set<String> b) {

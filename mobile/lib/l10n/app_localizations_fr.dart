@@ -565,6 +565,9 @@ class L10nFr extends L10n {
   String get signOut => 'Se déconnecter';
 
   @override
+  String get takeTodayPhoto => 'Prendre ma photo du jour';
+
+  @override
   String get reminderTime => 'Heure du rappel';
 
   @override

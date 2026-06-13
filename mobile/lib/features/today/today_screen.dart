@@ -75,6 +75,19 @@ class TodayScreen extends ConsumerWidget {
                 ]),
               ),
             ),
+            const SizedBox(height: 6),
+            // Raccourci : prendre directement la photo du jour.
+            MdaButton(
+              t.takeTodayPhoto,
+              full: true,
+              icon: 'camera',
+              onTap: () {
+                if (g.tasks.isNotEmpty) {
+                  ref.read(gameProvider.notifier).setCaptureTask(g.tasks.first);
+                }
+                context.push('/camera');
+              },
+            ),
           ]),
         ),
         // photos à faire

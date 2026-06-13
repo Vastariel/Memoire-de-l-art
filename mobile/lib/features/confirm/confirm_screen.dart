@@ -38,7 +38,7 @@ class _ConfirmScreenState extends ConsumerState<ConfirmScreen> {
     final lang = ref.watch(langProvider);
     final g = ref.watch(gameProvider);
     final task = g.currentTask;
-    final v = kVariants[task?.variant ?? g.myVariant]!;
+    final v = kVariants[g.activeVariantKey]!;
     final cells = kArtwork.ofVariant(v.key).take(24).toList();
 
     return Scaffold(

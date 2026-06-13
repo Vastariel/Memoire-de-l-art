@@ -559,6 +559,9 @@ class L10nEn extends L10n {
   String get signOut => 'Sign out';
 
   @override
+  String get takeTodayPhoto => 'Take today\'s photo';
+
+  @override
   String get reminderTime => 'Reminder time';
 
   @override

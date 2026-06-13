@@ -40,6 +40,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
     final g = ref.watch(gameProvider);
     final artwork = ref.watch(artworkDataProvider).valueOrNull;
     final info = ref.watch(weekInfoProvider).valueOrNull ?? const WeekInfo();
+    final photos = ref.watch(instancePhotoUrlsProvider(g.activeInstanceId)).valueOrNull ?? const {};
     final all = kFamilies.keys.toSet();
 
     // Avant le reveal du dimanche : teaser, pas de spoil.
@@ -83,6 +84,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
                             pulse: false,
                             gap: 1,
                             artwork: artwork,
+                            photos: photos,
                           ),
                         ),
                       ),

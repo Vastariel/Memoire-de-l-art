@@ -199,6 +199,7 @@
   "exportData": "Export my data",
   "deleteAccount": "Delete my account",
   "signOut": "Sign out",
+  "takeTodayPhoto": "Take today's photo",
   "reminderTime": "Reminder time",
   "inviteMessage": "Join my atelier \"{name}\" on Mémoire de l'art! Code: {code}",
   "@inviteMessage": { "placeholders": { "name": {}, "code": {} } },

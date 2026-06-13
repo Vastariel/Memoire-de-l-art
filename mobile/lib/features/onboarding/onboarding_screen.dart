@@ -294,8 +294,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: 10),
           GestureDetector(
             onTap: () async {
-              await ref.read(authProvider.notifier).signInDev();
-              if (ref.read(authProvider).online) await ref.read(gameProvider.notifier).loadFromApi();
+              final online = await ref.read(authProvider.notifier).signInTest();
+              if (online) await ref.read(gameProvider.notifier).loadFromApi();
               if (mounted) context.go('/today');
             },
             child: Text(t.devContinue, style: MdaType.sans(size: 13, weight: FontWeight.w600, color: context.fg3)),

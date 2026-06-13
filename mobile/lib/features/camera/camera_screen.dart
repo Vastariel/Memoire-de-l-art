@@ -107,7 +107,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
     final lang = ref.watch(langProvider);
     final g = ref.watch(gameProvider);
     final task = g.currentTask;
-    final v = kVariants[task?.variant ?? g.myVariant]!;
+    final v = kVariants[g.activeVariantKey]!;
     final target = v.color;
 
     final camsAsync = ref.watch(availableCamerasProvider);

@@ -4,7 +4,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../services/db';
 import { currentArtwork, isoWeek } from '../services/cycle';
+import { env } from '../config/env';
 import type { JwtPayload } from '../models/types';
+
+// Fixed shared atelier used by the dev "skip login" flow so every tester lands
+// in the same place. Created on first use; gated by ALLOW_DEV_LOGIN.
+const TEST_CODE = 'TESTMDA';
+const TEST_NAME = 'test';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function genCode(len = 6): string {
@@ -41,6 +47,39 @@ export async function instanceRoutes(app: FastifyInstance) {
     await db.query(`INSERT INTO instance_members (instance_id, user_id) VALUES ($1, $2)`, [id, userId]);
     return reply.code(201).send({
       instance: { id, code, name: body.name ?? null, mode: body.mode, solo: body.solo, members: 1, place: 1 },
+    });
+  });
+
+  // Dev only: get-or-create the shared "test" atelier and join it. Lets the
+  // mobile "skip login" flow drop every tester into one shared instance.
+  app.post('/test', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (env.NODE_ENV === 'production' && !env.ALLOW_DEV_LOGIN) {
+      return reply.code(403).send({ error: 'Atelier de test désactivé.' });
+    }
+    const { userId } = req.user as JwtPayload;
+    let row = await db.query<{ id: string; name: string | null; mode: string; solo: boolean }>(
+      `SELECT id, name, mode, solo FROM instances WHERE code = $1`, [TEST_CODE],
+    );
+    if (row.rows.length === 0) {
+      row = await db.query(
+        `INSERT INTO instances (code, name, mode, solo, owner_user_id)
+         VALUES ($1, $2, 'shared', FALSE, $3)
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id, name, mode, solo`,
+        [TEST_CODE, TEST_NAME, userId],
+      );
+    }
+    const it = row.rows[0]!;
+    await db.query(
+      `INSERT INTO instance_members (instance_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [it.id, userId],
+    );
+    await importSharedPhotos(userId, it.id, it.mode);
+    const members = await db.query<{ n: string }>(
+      `SELECT COUNT(*) AS n FROM instance_members WHERE instance_id = $1`, [it.id],
+    );
+    return reply.send({
+      instance: { id: it.id, code: TEST_CODE, name: it.name, mode: it.mode, solo: it.solo, members: parseInt(members.rows[0]!.n), place: 1 },
     });
   });
 

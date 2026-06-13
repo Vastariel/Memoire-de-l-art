@@ -118,6 +118,10 @@ class ApiClient {
       ((await _dio.post('/instances/join', data: {'code': code})).data as Map<String, dynamic>)['instance']
           as Map<String, dynamic>;
 
+  /// Dev : rejoint l'atelier partagé « test » (le crée si besoin côté serveur).
+  Future<Map<String, dynamic>> joinTestInstance() async =>
+      ((await _dio.post('/instances/test')).data as Map<String, dynamic>)['instance'] as Map<String, dynamic>;
+
   Future<void> claim(String instanceId, String variantKey) async {
     await _dio.post('/claims', data: {'instanceId': instanceId, 'variantKey': variantKey});
   }

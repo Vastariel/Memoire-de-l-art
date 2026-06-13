@@ -44,6 +44,26 @@ export interface AdminPhoto {
   pseudo: string | null;
 }
 
+export interface AdminInstance {
+  id: string;
+  code: string;
+  name: string | null;
+  mode: 'shared' | 'separate';
+  solo: boolean;
+  createdAt: string;
+  members: number;
+  lastActivity: string | null;
+}
+
+export interface AdminMember {
+  id: string;
+  pseudo: string;
+  pig: string | null;
+  joinedAt: string;
+  points: number;
+  lastPhoto: string | null;
+}
+
 export interface ArtworkPayload {
   id: string;
   titleFr?: string;
@@ -78,4 +98,8 @@ export const api = {
   gallery: (params: { instanceId?: string; userId?: string } = {}) =>
     http.get<{ photos: AdminPhoto[] }>('/gallery', { params }).then(r => r.data.photos),
   deletePhoto: (id: string) => http.delete(`/photos/${id}`),
+  instances: () => http.get<{ instances: AdminInstance[] }>('/instances').then(r => r.data.instances),
+  instanceMembers: (id: string) =>
+    http.get<{ members: AdminMember[] }>(`/instances/${id}/members`).then(r => r.data.members),
+  deleteInstance: (id: string) => http.delete(`/instances/${id}`),
 };

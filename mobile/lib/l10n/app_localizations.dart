@@ -1033,6 +1033,12 @@ abstract class L10n {
   /// **'Sign out'**
   String get signOut;
 
+  /// No description provided for @takeTodayPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Take today\'s photo'**
+  String get takeTodayPhoto;
+
   /// No description provided for @reminderTime.
   ///
   /// In en, this message translates to:

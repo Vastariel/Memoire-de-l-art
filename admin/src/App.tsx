@@ -5,12 +5,13 @@ import { Refine } from '@refinedev/core';
 import { RefineThemes, ThemedLayoutV2, ThemedSiderV2, ThemedTitleV2 } from '@refinedev/antd';
 import { ConfigProvider, App as AntdApp } from 'antd';
 import frFR from 'antd/locale/fr_FR';
-import { DashboardOutlined, PictureOutlined, CameraOutlined } from '@ant-design/icons';
+import { DashboardOutlined, PictureOutlined, CameraOutlined, TeamOutlined } from '@ant-design/icons';
 
 import { Dashboard } from './pages/Dashboard';
 import { ArtworksList } from './pages/ArtworksList';
 import { ArtworkBuilder } from './pages/ArtworkBuilder';
 import { Gallery } from './pages/Gallery';
+import { Instances } from './pages/Instances';
 import { Login } from './pages/Login';
 import { hasToken } from './services/api';
 
@@ -32,6 +33,7 @@ export const App: React.FC = () => {
                 { name: 'dashboard', list: '/', meta: { label: 'Tableau de bord', icon: <DashboardOutlined /> } },
                 { name: 'artworks', list: '/artworks', create: '/artworks/new', meta: { label: 'Œuvres', icon: <PictureOutlined /> } },
                 { name: 'gallery', list: '/gallery', meta: { label: 'Galerie', icon: <CameraOutlined /> } },
+                { name: 'instances', list: '/instances', meta: { label: 'Ateliers', icon: <TeamOutlined /> } },
               ]}
             >
               <ThemedLayoutV2
@@ -43,6 +45,7 @@ export const App: React.FC = () => {
                   <Route path="/artworks/new" element={<ArtworkBuilder />} />
                   <Route path="/artworks/:id/edit" element={<ArtworkBuilder />} />
                   <Route path="/gallery" element={<Gallery />} />
+                  <Route path="/instances" element={<Instances />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </ThemedLayoutV2>

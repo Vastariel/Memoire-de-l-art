@@ -80,6 +80,7 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
     final g = ref.watch(gameProvider);
     ref.watch(instanceFillProvider(g.activeInstanceId)); // prefetch block authors
     final artwork = ref.watch(artworkDataProvider).valueOrNull;
+    final photos = ref.watch(instancePhotoUrlsProvider(g.activeInstanceId)).valueOrNull ?? const {};
     final filledCount = g.filled.length;
 
     return ListView(
@@ -116,6 +117,7 @@ class _ArtworkScreenState extends ConsumerState<ArtworkScreen> {
                     vitrail: _zoom,
                     pulse: _zoom < 0.3 && _scale < 1.05,
                     artwork: artwork,
+                    photos: photos,
                     onTapCell: (cell, isFilled) {
                       if (isFilled) _showBlock(cell, lang);
                     },

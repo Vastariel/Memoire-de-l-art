@@ -5,7 +5,9 @@
 // ID token to ApiClient.auth('google'|'apple', token: idToken). For now, every
 // path authenticates via /auth/dev (ALLOW_DEV_LOGIN=true on the server).
 
+import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_client.dart';
 import 'api_provider.dart';
 
@@ -85,6 +87,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } catch (_) {/* offline */}
     }
     state = state.copyWith(signedIn: true, online: false);
+  }
+
+  /// Skip login (test) — distinct-but-stable dev account per device, then join
+  /// the shared "test" atelier so uploads have an instance. Returns true online.
+  Future<bool> signInTest() async {
+    final prefs = await SharedPreferences.getInstance();
+    var token = prefs.getString('mda.devToken');
+    if (token == null) {
+      token = 'test-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(99999)}';
+      await prefs.setString('mda.devToken', token);
+    }
+    var pseudo = prefs.getString('mda.devPseudo') ?? 'Testeur ${Random().nextInt(900) + 100}';
+    await prefs.setString('mda.devPseudo', pseudo);
+
+    if (_useApi) {
+      try {
+        final user = await _api.auth('dev', token: token, pseudo: pseudo, consent: true);
+        pseudo = (user['pseudo'] as String?) ?? pseudo;
+        await _api.joinTestInstance();
+        state = state.copyWith(signedIn: true, online: true, pseudo: pseudo);
+        return true;
+      } catch (_) {/* fall through to offline */}
+    }
+    state = state.copyWith(signedIn: true, online: false, pseudo: pseudo);
+    return false;
   }
 
   /// Restore a saved session on launch.

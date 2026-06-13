@@ -100,6 +100,10 @@ class GameState {
     return tasks.isNotEmpty ? tasks.first : null;
   }
 
+  /// Variante visée par la capture en cours : rattrapage > tâche du jour.
+  String get activeVariantKey =>
+      isCatchup ? (catchupVariant ?? myVariant) : (currentTask?.variant ?? myVariant);
+
   GameState copyWith({
     String? myVariant,
     Set<String>? filled,

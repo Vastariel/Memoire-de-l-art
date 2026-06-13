@@ -162,4 +162,53 @@ export async function adminRoutes(app: FastifyInstance) {
     await db.query(`DELETE FROM photos WHERE id = $1`, [id]);
     return reply.code(204).send();
   });
+
+  // ── Ateliers (instances) — gestion/modération ──────────────────────────────
+  app.get('/instances', { onRequest: [requireAdmin] }, async (_req, reply) => {
+    const rows = await db.query(
+      `SELECT i.id, i.code, i.name, i.mode, i.solo, i.created_at,
+              (SELECT COUNT(*) FROM instance_members m WHERE m.instance_id = i.id) AS members,
+              (SELECT MAX(p.created_at)
+                 FROM contributions c JOIN photos p ON p.id = c.photo_id
+                WHERE c.instance_id = i.id) AS last_activity
+       FROM instances i
+       ORDER BY last_activity DESC NULLS LAST, i.created_at DESC`,
+    );
+    return reply.send({
+      instances: rows.rows.map(r => ({
+        id: r.id, code: r.code, name: r.name, mode: r.mode, solo: r.solo,
+        createdAt: r.created_at, members: parseInt(r.members), lastActivity: r.last_activity,
+      })),
+    });
+  });
+
+  // Members of one atelier (with weekly points + last photo).
+  app.get('/instances/:id/members', { onRequest: [requireAdmin] }, async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const { year, week } = isoWeek();
+    const rows = await db.query(
+      `SELECT u.id, u.pseudo, u.avatar_pigment AS pig, m.joined_at,
+              COALESCE(s.points, 0) AS points,
+              (SELECT MAX(p.created_at) FROM photos p WHERE p.user_id = u.id) AS last_photo
+       FROM instance_members m
+       JOIN app_users u ON u.id = m.user_id
+       LEFT JOIN scores s ON s.user_id = u.id AND s.instance_id = $1 AND s.iso_year = $2 AND s.iso_week = $3
+       WHERE m.instance_id = $1
+       ORDER BY points DESC, u.created_at`,
+      [id, year, week],
+    );
+    return reply.send({
+      members: rows.rows.map(r => ({
+        id: r.id, pseudo: r.pseudo ?? 'Anonyme', pig: r.pig,
+        joinedAt: r.joined_at, points: parseInt(r.points), lastPhoto: r.last_photo,
+      })),
+    });
+  });
+
+  // Delete an atelier (cascade removes members & contributions; photos remain).
+  app.delete('/instances/:id', { onRequest: [requireAdmin] }, async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    await db.query(`DELETE FROM instances WHERE id = $1`, [id]);
+    return reply.code(204).send();
+  });
 }

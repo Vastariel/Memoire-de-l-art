@@ -199,6 +199,15 @@ final instancePhotosProvider = FutureProvider.family<List<InstancePhoto>, String
   }
 });
 
+// variantKey → URL absolue de la photo contribuée (pour peindre le vitrail).
+final instancePhotoUrlsProvider = FutureProvider.family<Map<String, String>, String>((ref, instanceId) async {
+  final photos = await ref.watch(instancePhotosProvider(instanceId).future);
+  return {
+    for (final p in photos)
+      if (p.variantKey.isNotEmpty && p.url.isNotEmpty) p.variantKey: p.url,
+  };
+});
+
 final instanceFillProvider = FutureProvider.family<Map<String, FilledInfo>, String>((ref, instanceId) async {
   Map<String, FilledInfo> mock() =>
       {for (final e in MockData.contributors.entries) e.key: FilledInfo(e.value.pseudo, e.value.score, null)};
