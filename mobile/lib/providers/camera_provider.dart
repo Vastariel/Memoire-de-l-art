@@ -117,6 +117,14 @@ Future<CaptureResult> capturePhoto(CameraController ctrl, Color targetColor) asy
   return CaptureResult(photoPath: file.path, detected: detected, delta: delta, verdict: verdictFromDelta(delta));
 }
 
+/// Même analyse pour une image choisie dans la galerie (image_picker).
+Future<CaptureResult> analyzeImageFile(String path, Color targetColor) async {
+  final bytes = await XFile(path).readAsBytes();
+  final detected = await _averageColorFromJpeg(bytes);
+  final delta = colorDelta(detected, targetColor);
+  return CaptureResult(photoPath: path, detected: detected, delta: delta, verdict: verdictFromDelta(delta));
+}
+
 // Quick average colour from JPEG bytes (heuristic, no extra packages).
 Future<Color> _averageColorFromJpeg(List<int> bytes) async {
   final start = bytes.length ~/ 3;

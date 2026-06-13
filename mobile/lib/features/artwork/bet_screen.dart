@@ -23,12 +23,25 @@ class BetScreen extends ConsumerStatefulWidget {
 
 class _BetScreenState extends ConsumerState<BetScreen> {
   String? _pick;
+  bool _restored = false;
 
   @override
   Widget build(BuildContext context) {
     final t = L10n.of(context);
     final g = ref.watch(gameProvider);
+    final artwork = ref.watch(artworkDataProvider).valueOrNull;
     final options = ref.watch(betOptionsProvider).valueOrNull ?? MockData.betOptions;
+
+    // Mode « modifier » : présélectionne le pari existant (une seule fois).
+    if (!_restored && _pick == null && g.bet != null) {
+      for (final o in options) {
+        if (o.title == g.bet!.title) {
+          _pick = o.id;
+          break;
+        }
+      }
+      if (_pick != null) _restored = true;
+    }
 
     return Scaffold(
       backgroundColor: context.paper,
@@ -48,7 +61,7 @@ class _BetScreenState extends ConsumerState<BetScreen> {
                   child: Stack(children: [
                     ImageFiltered(
                       imageFilter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-                      child: MosaicWidget(filled: g.filled, pulse: false),
+                      child: MosaicWidget(filled: g.filled, pulse: false, artwork: artwork),
                     ),
                     Positioned.fill(child: Container(color: context.paper.withValues(alpha: 0.34))),
                   ]),

@@ -1,5 +1,7 @@
 // game_models.dart — modèles du domaine v2 (immutables).
 
+import '../engine/mosaic_engine.dart' show ArtworkData;
+
 enum InstanceMode { shared, separate }
 
 extension InstanceModeX on InstanceMode {
@@ -9,6 +11,7 @@ extension InstanceModeX on InstanceMode {
 /// Résumé d'une instance pour les listes / le hero classement.
 class InstanceSummary {
   final String id;
+  final String code; // code d'invitation à 6 caractères (serveur)
   final String name;
   final InstanceMode mode;
   final int members;
@@ -17,6 +20,7 @@ class InstanceSummary {
 
   const InstanceSummary({
     required this.id,
+    this.code = '',
     required this.name,
     required this.mode,
     required this.members,
@@ -85,7 +89,8 @@ class CollectionItem {
   final int year;
   final int week;
   final bool unlocked;
-  final List<String> seed; // clés pigment pour la vignette
+  final List<String> seed; // clés pigment pour la vignette (repli)
+  final ArtworkData? art; // cellules réelles si débloquée — vignette fidèle
 
   const CollectionItem({
     required this.id,
@@ -95,6 +100,7 @@ class CollectionItem {
     required this.week,
     required this.unlocked,
     required this.seed,
+    this.art,
   });
 }
 
@@ -111,7 +117,9 @@ class BetOption {
 class Bet {
   final String title;
   final int day;
-  const Bet(this.title, this.day);
+  final bool? correct; // null tant que non résolu (reveal du dimanche)
+  final int points; // barème du jour de pose
+  const Bet(this.title, this.day, {this.correct, this.points = 0});
 }
 
 /// Contribution d'un bloc (détail vitrail) indexée par variante.

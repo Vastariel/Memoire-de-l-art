@@ -9,7 +9,6 @@ import '../../l10n/app_localizations.dart';
 import '../../models/game_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/game_provider.dart';
-import '../../providers/settings_provider.dart';
 import '../../theme/colors.dart';
 import '../../theme/palette.dart';
 import '../../theme/theme.dart';
@@ -24,7 +23,6 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = L10n.of(context);
-    final lang = ref.watch(langProvider);
     final g = ref.watch(gameProvider);
     final auth = ref.watch(authProvider);
     final pseudo = auth.pseudo;
@@ -45,7 +43,6 @@ class ProfileScreen extends ConsumerWidget {
               MdaIcon('user', size: 15, color: context.fg3),
             ]),
           ),
-          Text(t.memberSince(lang == 'en' ? 'March' : 'mars'), style: MdaType.sans(size: 13, color: context.fg2)),
         ]),
         // stats
         Padding(
@@ -55,7 +52,7 @@ class ProfileScreen extends ConsumerWidget {
             const SizedBox(width: 11),
             _stat(context, '${g.streak}', t.statStreak, 'flame'),
             const SizedBox(width: 11),
-            _stat(context, '12', t.statWorks, 'frame'),
+            _stat(context, '${g.works}', t.statWorks, 'frame'),
           ]),
         ),
         // assiduité
@@ -71,9 +68,13 @@ class ProfileScreen extends ConsumerWidget {
               mainAxisSpacing: 7,
               crossAxisSpacing: 7,
               children: [
+                // 28 derniers jours, du plus ancien au plus récent ; un carré
+                // coloré = au moins une photo ce jour-là (API /me → activity).
                 for (var i = 0; i < 28; i++)
                   () {
-                    final on = i % 9 != 4 && hash(i * 3.7) > 0.32;
+                    final day = DateTime.now().toUtc().subtract(Duration(days: 27 - i));
+                    final iso = day.toIso8601String().substring(0, 10);
+                    final on = g.activity.contains(iso);
                     return DecoratedBox(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(5),

@@ -1,8 +1,10 @@
 // instance_detail_screen.dart — détail instance : classement, membres, invitation.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../data/mock_data.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/game_models.dart';
@@ -202,89 +204,48 @@ class _InviteSheet extends StatefulWidget {
 }
 
 class _InviteSheetState extends State<_InviteSheet> {
-  String _via = 'code';
   bool _copied = false;
 
   @override
   Widget build(BuildContext context) {
     final t = widget.t;
-    final code = '${widget.inst.id}X7';
+    final code = widget.inst.code;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Text(t.inviteTo(widget.inst.name), style: MdaType.serif(size: 23, weight: FontWeight.w500, color: context.fg1)),
       const SizedBox(height: 4),
       Text(t.inviteShareAny, style: MdaType.sans(size: 13.5, color: context.fg2)),
       const SizedBox(height: 18),
-      Row(children: [
-        _viaTab('code', t.viaCode, 'qr'),
-        const SizedBox(width: 8),
-        _viaTab('link', t.viaLink, 'link'),
-        const SizedBox(width: 8),
-        _viaTab('qr', t.viaQr, 'qr'),
-      ]),
-      const SizedBox(height: 18),
-      if (_via == 'code')
-        Center(
-          child: Column(children: [
-            Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-              for (final ch in code.split('')) ...[
-                Container(
-                  width: 46,
-                  height: 56,
-                  margin: const EdgeInsets.symmetric(horizontal: 4.5),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: context.surfaceSunk, borderRadius: MdaRadius.bSm),
-                  child: Text(ch, style: MdaType.serif(size: 27, color: context.fg1)),
-                ),
-              ],
-            ]),
-            const SizedBox(height: 10),
-            Text(t.validDays(7), style: MdaType.sans(size: 13, color: context.fg2)),
+      Center(
+        child: Column(children: [
+          Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+            for (final ch in code.split('')) ...[
+              Container(
+                width: 46,
+                height: 56,
+                margin: const EdgeInsets.symmetric(horizontal: 4.5),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: context.surfaceSunk, borderRadius: MdaRadius.bSm),
+                child: Text(ch, style: MdaType.serif(size: 27, color: context.fg1)),
+              ),
+            ],
           ]),
-        ),
-      if (_via == 'link')
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(color: context.surfaceSunk, borderRadius: MdaRadius.bMd),
-          child: Row(children: [
-            MdaIcon('link', size: 18, color: context.fg3),
-            const SizedBox(width: 10),
-            Expanded(child: Text('memoire.art/i/${widget.inst.id}-x7', overflow: TextOverflow.ellipsis, style: MdaType.sans(size: 14, color: context.fg1))),
-            MdaButton(_copied ? t.actionCopied : t.actionCopy, variant: MdaBtnVariant.ink, icon: _copied ? 'check' : 'copy',
-                fontSize: 13, padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7), onTap: () => setState(() => _copied = true)),
-          ]),
-        ),
-      if (_via == 'qr')
-        Center(
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(color: Colors.white, borderRadius: MdaRadius.bLg, boxShadow: MdaShadows.md),
-            child: MdaQr('${widget.inst.id}-MDA', size: 150),
+          const SizedBox(height: 14),
+          MdaButton(
+            _copied ? t.actionCopied : t.actionCopy,
+            variant: MdaBtnVariant.ink,
+            icon: _copied ? 'check' : 'copy',
+            fontSize: 13,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            onTap: () async {
+              await Clipboard.setData(ClipboardData(text: code));
+              if (mounted) setState(() => _copied = true);
+            },
           ),
-        ),
-      const SizedBox(height: 20),
-      MdaButton(t.shareInvite, full: true, icon: 'share', onTap: () => Navigator.of(context).pop()),
-    ]);
-  }
-
-  Widget _viaTab(String k, String label, String icon) {
-    final on = _via == k;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _via = k),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          decoration: BoxDecoration(
-            color: on ? MdaColors.clay100 : context.surface,
-            borderRadius: MdaRadius.bMd,
-            border: Border.all(color: on ? context.accent : context.line),
-          ),
-          child: Column(children: [
-            MdaIcon(icon, size: 18, color: on ? MdaColors.clay600 : context.fg2, strokeWidth: 1.8),
-            const SizedBox(height: 5),
-            Text(label, style: MdaType.sans(size: 12.5, weight: FontWeight.w600, color: on ? MdaColors.clay600 : context.fg2)),
-          ]),
-        ),
+        ]),
       ),
-    );
+      const SizedBox(height: 20),
+      MdaButton(t.shareInvite, full: true, icon: 'share',
+          onTap: () => Share.share(t.inviteMessage(widget.inst.name, code))),
+    ]);
   }
 }

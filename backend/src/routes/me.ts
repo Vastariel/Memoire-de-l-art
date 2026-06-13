@@ -25,16 +25,25 @@ export async function meRoutes(app: FastifyInstance) {
     const user = await loadUser(userId);
     if (!user) return reply.code(404).send({ error: 'Compte introuvable.' });
     const { year, week } = isoWeek();
-    const [pts, streak, works] = await Promise.all([
+    const [pts, streak, revealed, activity] = await Promise.all([
       db.query<{ s: string }>(`SELECT COALESCE(SUM(points),0) AS s FROM scores WHERE user_id=$1 AND iso_year=$2 AND iso_week=$3`, [userId, year, week]),
       db.query<{ c: number }>(`SELECT COALESCE(current_,0) AS c FROM streaks WHERE user_id=$1`, [userId]),
-      db.query<{ n: string }>(`SELECT COUNT(*) AS n FROM artworks WHERE status='revealed'`, []),
+      db.query<{ id: string }>(`SELECT id FROM artworks WHERE status='revealed'`, []),
+      // Attendance: distinct days with a photo over the last 28 days.
+      db.query<{ d: string }>(
+        `SELECT DISTINCT taken_on::text AS d FROM photos
+         WHERE user_id = $1 AND deleted_at IS NULL AND taken_on >= CURRENT_DATE - 27`,
+        [userId],
+      ),
     ]);
+    // Works = revealed artworks actually unlocked in the user's collection.
+    const unlockedFlags = await Promise.all(revealed.rows.map(r => isInCollection(userId, r.id)));
     return reply.send({
       user: publicUser(user),
       points: parseInt(pts.rows[0]?.s ?? '0'),
       streak: streak.rows[0]?.c ?? 0,
-      works: parseInt(works.rows[0]?.n ?? '0'),
+      works: unlockedFlags.filter(Boolean).length,
+      activity: activity.rows.map(r => r.d),
     });
   });
 
@@ -60,18 +69,23 @@ export async function meRoutes(app: FastifyInstance) {
     const { userId } = req.user as JwtPayload;
     const lang = (req.query as { lang?: string }).lang ?? 'fr';
     const rows = await db.query(
-      `SELECT id, title_fr, title_en, artist, year_, iso_week
+      `SELECT id, title_fr, title_en, artist, year_, iso_week, cols, rows AS rows_, cells
        FROM artworks WHERE status = 'revealed' ORDER BY iso_year DESC, iso_week DESC`,
       [],
     );
-    const items = await Promise.all(rows.rows.map(async r => ({
-      id: r.id,
-      title: lang === 'en' ? r.title_en : r.title_fr,
-      artist: r.artist,
-      year: r.year_,
-      week: r.iso_week,
-      unlocked: await isInCollection(userId, r.id),
-    })));
+    const items = await Promise.all(rows.rows.map(async r => {
+      const unlocked = await isInCollection(userId, r.id);
+      return {
+        id: r.id,
+        title: lang === 'en' ? r.title_en : r.title_fr,
+        artist: r.artist,
+        year: r.year_,
+        week: r.iso_week,
+        unlocked,
+        // Cell map only for unlocked works (locked cards render a placeholder).
+        ...(unlocked ? { cols: r.cols, rows: r.rows_, cells: r.cells } : {}),
+      };
+    }));
     return reply.send({ collection: items });
   });
 

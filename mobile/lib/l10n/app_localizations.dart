@@ -1039,6 +1039,30 @@ abstract class L10n {
   /// **'Reminder time'**
   String get reminderTime;
 
+  /// No description provided for @inviteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Join my atelier \"{name}\" on Mémoire de l\'art! Code: {code}'**
+  String inviteMessage(Object name, Object code);
+
+  /// No description provided for @revealPendingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The artwork is revealed Sunday evening'**
+  String get revealPendingTitle;
+
+  /// No description provided for @revealPendingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep placing your colours: the mosaic builds day after day. Come back Sunday to discover the artwork and the bet results.'**
+  String get revealPendingBody;
+
+  /// No description provided for @shareRevealMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'I discovered \"{title}\" on Mémoire de l\'art (week {week})!'**
+  String shareRevealMessage(Object title, Object week);
+
   /// No description provided for @renameTitle.
   ///
   /// In en, this message translates to:

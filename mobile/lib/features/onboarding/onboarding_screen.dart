@@ -246,38 +246,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   List<Widget> _joinBlock(L10n t) {
     return [
-      Row(children: [
-        _viaTab('code', t.viaCode, 'qr'),
-        const SizedBox(width: 8),
-        _viaTab('link', t.viaLink, 'link'),
-        const SizedBox(width: 8),
-        _viaTab('qr', t.viaQr, 'qr'),
-      ]),
-      const SizedBox(height: 16),
-      if (via == 'code') _CodeInput(controller: _code),
-      if (via == 'link')
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(color: context.surface, borderRadius: MdaRadius.bMd, border: Border.all(color: context.line)),
-          child: Row(children: [
-            MdaIcon('link', size: 18, color: context.fg3),
-            const SizedBox(width: 10),
-            Expanded(child: Text('memoire.art/i/ARL8-camille', overflow: TextOverflow.ellipsis, style: MdaType.sans(size: 14, color: context.fg2))),
-            MdaChip(t.onbOpen, onTap: () => _code.text = 'ARL8X7'),
-          ]),
-        ),
-      if (via == 'qr')
-        Center(
-          child: Column(children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: const BoxDecoration(color: Colors.white, borderRadius: MdaRadius.bLg, boxShadow: MdaShadows.md),
-              child: const MdaQr('ARL8-MDA', size: 150),
-            ),
-            const SizedBox(height: 12),
-            Text(t.onbScanQr, textAlign: TextAlign.center, style: MdaType.sans(size: 13, color: context.fg2)),
-          ]),
-        ),
+      _CodeInput(controller: _code),
       const SizedBox(height: 16),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -311,28 +280,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         onTap: () => setState(() => mode = InstanceMode.separate),
       ),
     ];
-  }
-
-  Widget _viaTab(String k, String label, String icon) {
-    final on = via == k;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => via = k),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          decoration: BoxDecoration(
-            color: on ? MdaColors.clay100 : context.surface,
-            borderRadius: MdaRadius.bMd,
-            border: Border.all(color: on ? context.accent : context.line),
-          ),
-          child: Column(children: [
-            MdaIcon(icon, size: 18, color: on ? MdaColors.clay600 : context.fg2, strokeWidth: 1.8),
-            const SizedBox(height: 5),
-            Text(label, style: MdaType.sans(size: 12.5, weight: FontWeight.w600, color: on ? MdaColors.clay600 : context.fg2)),
-          ]),
-        ),
-      ),
-    );
   }
 
   Widget _footer(L10n t) {

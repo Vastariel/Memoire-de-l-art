@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../engine/mosaic_engine.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/data_providers.dart';
@@ -38,7 +39,11 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
     final t = L10n.of(context);
     final g = ref.watch(gameProvider);
     final artwork = ref.watch(artworkDataProvider).valueOrNull;
+    final info = ref.watch(weekInfoProvider).valueOrNull ?? const WeekInfo();
     final all = kFamilies.keys.toSet();
+
+    // Avant le reveal du dimanche : teaser, pas de spoil.
+    if (!info.revealed) return _pending(context, t, g.week);
 
     return Scaffold(
       body: Container(
@@ -87,12 +92,13 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
                       opacity: _phase >= 2 ? 1 : 0,
                       duration: const Duration(milliseconds: 500),
                       child: Column(children: [
-                        Text('Le Semeur au soleil couchant', textAlign: TextAlign.center,
+                        Text(info.title ?? '—', textAlign: TextAlign.center,
                             style: MdaType.serif(size: 23, italic: true, color: Colors.white)),
                         const SizedBox(height: 6),
-                        Text('Vincent van Gogh · 1888 · Kröller-Müller Museum',
+                        Text(
+                            [if (info.artist != null) info.artist!, if (info.year != null) '${info.year}'].join(' · '),
                             textAlign: TextAlign.center, style: MdaType.sans(size: 13.5, color: Colors.white.withValues(alpha: 0.7))),
-                        if (g.bet != null) ...[
+                        if (g.bet?.correct == true) ...[
                           const SizedBox(height: 14),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
@@ -100,7 +106,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
                             child: Row(mainAxisSize: MainAxisSize.min, children: [
                               const MdaIcon('checkCircle', size: 15, color: Color(0xFF8FD3A6)),
                               const SizedBox(width: 7),
-                              Text('${t.betWon} · +150 pts',
+                              Text('${t.betWon} · +${g.bet!.points} pts',
                                   style: MdaType.sans(size: 13, weight: FontWeight.w700, color: const Color(0xFF8FD3A6))),
                             ]),
                           ),
@@ -117,9 +123,45 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(26, 8, 26, 16),
                 child: Column(children: [
-                  MdaButton(t.shareCard, full: true, variant: MdaBtnVariant.dark, icon: 'share', onTap: () {}),
+                  MdaButton(t.shareCard, full: true, variant: MdaBtnVariant.dark, icon: 'share',
+                      onTap: () => Share.share(t.shareRevealMessage(info.title ?? '—', g.week))),
                   const SizedBox(height: 10),
                   MdaButton(t.addToCollection, full: true, variant: MdaBtnVariant.ghost, textColor: Colors.white, onTap: () => context.go('/collection')),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// Teaser avant le reveal : pas de cartel, pas de spoil.
+  Widget _pending(BuildContext context, L10n t, int week) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF1C1813), Color(0xFF2A2017)]),
+        ),
+        child: SafeArea(
+          child: Column(children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: IconTapButton('x', color: Colors.white70, onTap: () => context.pop()),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 36),
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const MdaIcon('lock', size: 40, color: Colors.white54),
+                  const SizedBox(height: 18),
+                  Overline(t.revealOverline(week), color: Colors.white.withValues(alpha: 0.55)),
+                  const SizedBox(height: 10),
+                  Text(t.revealPendingTitle, textAlign: TextAlign.center,
+                      style: MdaType.serif(size: 24, weight: FontWeight.w500, color: Colors.white)),
+                  const SizedBox(height: 10),
+                  Text(t.revealPendingBody, textAlign: TextAlign.center,
+                      style: MdaType.sans(size: 14, height: 1.5, color: Colors.white.withValues(alpha: 0.7))),
                 ]),
               ),
             ),

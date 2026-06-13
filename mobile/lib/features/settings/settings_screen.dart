@@ -88,8 +88,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 12),
                 Overline(t.privacyGdpr),
                 const SizedBox(height: 10),
-                _linkRow(context, 'shield', t.privacyPolicy),
-                const SizedBox(height: 9),
                 _linkRow(context, 'download', t.exportData, onTap: _busy ? null : () => _export(t)),
                 const SizedBox(height: 9),
                 _linkRow(context, 'trash', t.deleteAccount, danger: true, onTap: _busy ? null : () => _confirmDelete(t)),

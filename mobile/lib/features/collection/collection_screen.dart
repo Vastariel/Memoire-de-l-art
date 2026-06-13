@@ -29,7 +29,6 @@ class CollectionScreen extends ConsumerWidget {
         TopBar(
           overline: t.worksAcquired(unlocked),
           title: t.tabCollection,
-          trailing: IconTapButton('info', onTap: () {}),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
@@ -62,7 +61,9 @@ class _GalleryCard extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       DecoratedBox(
         decoration: const BoxDecoration(borderRadius: MdaRadius.bSm, boxShadow: MdaShadows.md),
-        child: _MiniArt(seed: item.seed, unlocked: item.unlocked),
+        child: item.art != null
+            ? _MiniMosaic(art: item.art!)
+            : _MiniArt(seed: item.seed, unlocked: item.unlocked),
       ),
       const SizedBox(height: 9),
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -74,6 +75,42 @@ class _GalleryCard extends StatelessWidget {
       ]),
     ]);
   }
+}
+
+/// Vignette fidèle : peint les vraies cellules de l'œuvre (plat, sans photos).
+class _MiniMosaic extends StatelessWidget {
+  final ArtworkData art;
+  const _MiniMosaic({required this.art});
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: ClipRRect(
+        borderRadius: MdaRadius.bSm,
+        child: CustomPaint(painter: _CellsPainter(art), child: const SizedBox.expand()),
+      ),
+    );
+  }
+}
+
+class _CellsPainter extends CustomPainter {
+  final ArtworkData art;
+  _CellsPainter(this.art);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cw = size.width / art.cols;
+    final ch = size.height / art.rows;
+    final paint = Paint();
+    for (final c in art.cells) {
+      paint.color = kVariants[c.variant]?.color ?? MdaColors.cream200;
+      canvas.drawRect(Rect.fromLTWH(c.col * cw, c.row * ch, cw + 0.5, ch + 0.5), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CellsPainter old) => old.art != art;
 }
 
 class _MiniArt extends StatelessWidget {

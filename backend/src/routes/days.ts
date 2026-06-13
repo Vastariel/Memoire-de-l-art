@@ -35,6 +35,13 @@ export async function dayRoutes(app: FastifyInstance) {
       [userId, a.id, day],
     );
 
+    // What the user already submitted today (restores task state on relaunch).
+    const submitted = await db.query<{ shared: boolean; separate_instance_id: string | null }>(
+      `SELECT shared, separate_instance_id FROM photos
+       WHERE user_id = $1 AND artwork_id = $2 AND day_ = $3 AND deleted_at IS NULL`,
+      [userId, a.id, day],
+    );
+
     return reply.send({
       weekDay: day,
       family: { key: family.key, nameFr: family.name_fr, nameEn: family.name_en },
@@ -46,6 +53,8 @@ export async function dayRoutes(app: FastifyInstance) {
         blocks: cells.filter(c => c.variant === v.key).length,
       })),
       claims: claims.rows.map(c => ({ instanceId: c.instance_id, variantKey: c.variant_key, byPseudo: c.pseudo })),
+      submittedShared: submitted.rows.some(r => r.shared),
+      submittedSeparate: submitted.rows.filter(r => r.separate_instance_id).map(r => r.separate_instance_id),
     });
   });
 }

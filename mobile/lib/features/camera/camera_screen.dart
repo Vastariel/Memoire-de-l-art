@@ -4,6 +4,7 @@
 import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../engine/mosaic_engine.dart';
@@ -43,6 +44,29 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
       } catch (_) {}
     }
     _streaming = false;
+  }
+
+  /// Galerie : choisir une photo existante → même pipeline analyse/upload.
+  Future<void> _pickFromGallery(Color target) async {
+    if (_shot) return;
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 88);
+    if (picked == null || !mounted) return;
+    await _stopStream();
+    int score;
+    String? photoPath;
+    try {
+      final res = await analyzeImageFile(picked.path, target);
+      score = res.score;
+      photoPath = res.photoPath;
+    } catch (_) {
+      score = 72 + math.Random().nextInt(22);
+      photoPath = picked.path;
+    }
+    if (!mounted) return;
+    setState(() => _shot = true);
+    await ref.read(gameProvider.notifier).captureDone(photoPath: photoPath, fallbackScore: score);
+    if (!mounted) return;
+    context.pushReplacement('/confirm');
   }
 
   Future<void> _capture(Color target, {CameraController? real}) async {
@@ -140,7 +164,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
           right: 0,
           bottom: 44,
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            _RoundBtn(icon: 'image', onTap: () {}, size: 46),
+            _RoundBtn(icon: 'image', onTap: () => _pickFromGallery(target), size: 46),
             const SizedBox(width: 34),
             GestureDetector(
               onTap: () => _capture(target, real: hasCamera ? _ctrl : null),

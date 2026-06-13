@@ -24,6 +24,28 @@ function seededShuffle<T>(arr: T[], seed: string): T[] {
 }
 
 export async function guessRoutes(app: FastifyInstance) {
+  // The caller's current bet on this week's artwork (null if none placed).
+  // `correct` stays null until the Sunday reveal settles it.
+  app.get('/mine', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { userId } = req.user as JwtPayload;
+    const a = await currentArtwork();
+    if (!a) return reply.send({ guess: null });
+    const r = await db.query<{ title_guess: string; day_placed: number; correct: boolean | null }>(
+      `SELECT title_guess, day_placed, correct FROM guesses WHERE user_id = $1 AND artwork_id = $2`,
+      [userId, a.id],
+    );
+    const g = r.rows[0];
+    if (!g) return reply.send({ guess: null });
+    return reply.send({
+      guess: {
+        titleGuess: g.title_guess,
+        dayPlaced: g.day_placed,
+        correct: g.correct,
+        points: betPoints(g.day_placed),
+      },
+    });
+  });
+
   // Options for the mystery bet UI: the real title + 3 decoys, shuffled.
   app.get('/options', { onRequest: [app.authenticate] }, async (_req, reply) => {
     const a = await currentArtwork();

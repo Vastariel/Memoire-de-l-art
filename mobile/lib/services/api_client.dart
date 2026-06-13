@@ -149,6 +149,10 @@ class ApiClient {
     await _dio.post('/guesses', data: {'titleGuess': titleGuess});
   }
 
+  /// Current week's bet for the signed-in user (null if none).
+  Future<Map<String, dynamic>?> myGuess() async =>
+      ((await _dio.get('/guesses/mine')).data as Map<String, dynamic>)['guess'] as Map<String, dynamic>?;
+
   Future<List<dynamic>> guessOptions() async =>
       ((await _dio.get('/guesses/options')).data as Map<String, dynamic>)['options'] as List<dynamic>;
 

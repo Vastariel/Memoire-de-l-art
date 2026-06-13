@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../l10n/app_localizations.dart';
+import '../../engine/mosaic_engine.dart';
 import '../../models/game_models.dart';
+import '../../providers/data_providers.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/colors.dart';
 import '../../theme/palette.dart';
@@ -22,6 +24,7 @@ class InstancesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = L10n.of(context);
     final g = ref.watch(gameProvider);
+    final artwork = ref.watch(artworkDataProvider).valueOrNull;
 
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
@@ -41,22 +44,28 @@ class InstancesScreen extends ConsumerWidget {
         for (final inst in g.instances)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: _InstanceCard(inst: inst, onTap: () => context.push('/instances/instance/${inst.id}')),
+            child: _InstanceCard(inst: inst, artwork: artwork, onTap: () => context.push('/instances/instance/${inst.id}')),
           ),
       ],
     );
   }
 }
 
-class _InstanceCard extends StatelessWidget {
+class _InstanceCard extends ConsumerWidget {
   final InstanceSummary inst;
+  final ArtworkData? artwork;
   final VoidCallback onTap;
-  const _InstanceCard({required this.inst, required this.onTap});
+  const _InstanceCard({required this.inst, this.artwork, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = L10n.of(context);
-    final preview = inst.solo ? const {'bleus'} : const {'bleus', 'ors', 'verts'};
+    // Remplissage réel de l'instance (familles couvertes) ; repli : vide.
+    final fills = ref.watch(instanceFillProvider(inst.id)).valueOrNull ?? const {};
+    final preview = <String>{
+      for (final vk in fills.keys)
+        if (kVariants[vk] != null) kVariants[vk]!.family,
+    };
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -67,7 +76,7 @@ class _InstanceCard extends StatelessWidget {
             width: 74,
             child: ClipRRect(
               borderRadius: MdaRadius.bSm,
-              child: MosaicWidget(filled: preview, pulse: false, gap: 1),
+              child: MosaicWidget(filled: preview, pulse: false, gap: 1, artwork: artwork),
             ),
           ),
           const SizedBox(width: 14),

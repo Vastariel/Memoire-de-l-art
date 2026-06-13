@@ -6,6 +6,7 @@ import '../data/mock_data.dart';
 import '../engine/mosaic_engine.dart';
 import '../models/game_models.dart';
 import 'api_provider.dart';
+import 'settings_provider.dart';
 
 /// Photo URLs returned by the API are relative (`/api/v1/photos/file/:id`) so
 /// the same DB row works for browser, mobile and tests. Prepend the API base
@@ -14,6 +15,35 @@ String absolutePhotoUrl(String url) {
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   return '${AppConfig.apiBaseUrl}$url';
 }
+
+// ── Current week's metadata (status + cartel after reveal) ──────────────────
+class WeekInfo {
+  final String status; // draft | planned | active | revealed
+  final String? title;
+  final String? artist;
+  final int? year;
+  final String? description;
+  const WeekInfo({this.status = 'active', this.title, this.artist, this.year, this.description});
+  bool get revealed => status == 'revealed';
+}
+
+final weekInfoProvider = FutureProvider<WeekInfo>((ref) async {
+  if (!ref.watch(useApiProvider)) return const WeekInfo();
+  try {
+    final w = await ref.watch(apiClientProvider).weeksCurrent(lang: ref.watch(langProvider));
+    final a = w['artwork'] as Map?;
+    if (a == null) return const WeekInfo();
+    return WeekInfo(
+      status: (a['status'] as String?) ?? 'active',
+      title: a['title'] as String?,
+      artist: a['artist'] as String?,
+      year: (a['year'] as num?)?.toInt(),
+      description: a['description'] as String?,
+    );
+  } catch (_) {
+    return const WeekInfo();
+  }
+});
 
 // ── Current week's artwork (cells) — drives the mosaic from the API ─────────
 final artworkDataProvider = FutureProvider<ArtworkData>((ref) async {
@@ -63,6 +93,20 @@ final collectionProvider = FutureProvider<List<CollectionItem>>((ref) async {
     final rows = await ref.watch(apiClientProvider).collection();
     return rows.map((r) {
       final m = r as Map<String, dynamic>;
+      // Cell map present only for unlocked works → faithful mini-mosaic.
+      ArtworkData? art;
+      final cells = m['cells'] as List?;
+      if (cells != null && cells.isNotEmpty) {
+        art = ArtworkData(
+          (m['cols'] as num?)?.toInt() ?? kCols,
+          (m['rows'] as num?)?.toInt() ?? kRows,
+          cells.map((c) {
+            final cm = c as Map;
+            return ArtCell((cm['i'] as num).toInt(), (cm['col'] as num).toInt(), (cm['row'] as num).toInt(),
+                cm['family'] as String, cm['variant'] as String);
+          }).toList(),
+        );
+      }
       return CollectionItem(
         id: (m['id'] as String).hashCode,
         title: (m['title'] as String?) ?? '—',
@@ -71,6 +115,7 @@ final collectionProvider = FutureProvider<List<CollectionItem>>((ref) async {
         week: (m['week'] as num?)?.toInt() ?? 0,
         unlocked: m['unlocked'] == true,
         seed: _seedFor(m['id'] as String),
+        art: art,
       );
     }).toList();
   } catch (_) {

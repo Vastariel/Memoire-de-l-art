@@ -568,6 +568,23 @@ class L10nFr extends L10n {
   String get reminderTime => 'Heure du rappel';
 
   @override
+  String inviteMessage(Object name, Object code) {
+    return 'Rejoins mon atelier « $name » sur Mémoire de l\'art ! Code : $code';
+  }
+
+  @override
+  String get revealPendingTitle => 'L\'œuvre se révèle dimanche soir';
+
+  @override
+  String get revealPendingBody =>
+      'Continue à déposer tes couleurs : la mosaïque s\'assemble jour après jour. Rendez-vous dimanche pour découvrir l\'œuvre et le résultat des paris.';
+
+  @override
+  String shareRevealMessage(Object title, Object week) {
+    return 'J\'ai découvert « $title » sur Mémoire de l\'art (semaine $week) !';
+  }
+
+  @override
   String get renameTitle => 'Ton pseudo';
 
   @override

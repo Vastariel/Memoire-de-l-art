@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/notifications.dart';
 import 'api_provider.dart';
 
 class SettingsState {
@@ -67,7 +68,37 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         notifHour: p.getInt(_kHour) ?? 19,
         notifMinute: p.getInt(_kMinute) ?? 0,
       );
+      // Replanifie au lancement (couvre les changements d'heure été/hiver).
+      _applySchedules();
     } catch (_) {/* prototype: best-effort */}
+  }
+
+  bool get _en => state.locale.languageCode == 'en';
+
+  void _applySchedules() {
+    final n = LocalNotifs.instance;
+    if (state.reminder) {
+      n.scheduleDaily(
+        state.notifHour,
+        state.notifMinute,
+        title: _en ? 'Today\'s colour awaits' : 'La couleur du jour t\'attend',
+        body: _en
+            ? 'Take your photo of the day and fill your cell of the mosaic.'
+            : 'Prends ta photo du jour et remplis ta case de la mosaïque.',
+      );
+    } else {
+      n.cancelDaily();
+    }
+    if (state.reveal) {
+      n.scheduleSundayReveal(
+        title: _en ? 'The artwork is revealed tonight!' : 'L\'œuvre se révèle ce soir !',
+        body: _en
+            ? 'Discover the week\'s artwork and the bet results.'
+            : 'Découvre l\'œuvre de la semaine et le résultat des paris.',
+      );
+    } else {
+      n.cancelSundayReveal();
+    }
   }
 
   Future<void> _save() async {
@@ -105,19 +136,26 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   void setReminder(bool on) {
     state = state.copyWith(reminder: on);
     _save();
-    // Backend has no "enabled" flag; only push the time when the reminder is on.
-    if (on) _sync(notifHour: state.notifHour, notifMinute: state.notifMinute);
+    if (on) {
+      LocalNotifs.instance.requestPermission();
+      // Backend has no "enabled" flag; only push the time when the reminder is on.
+      _sync(notifHour: state.notifHour, notifMinute: state.notifMinute);
+    }
+    _applySchedules();
   }
 
   void setReveal(bool on) {
     state = state.copyWith(reveal: on);
     _save();
+    if (on) LocalNotifs.instance.requestPermission();
+    _applySchedules();
   }
 
   void setNotifTime(int hour, int minute) {
     state = state.copyWith(notifHour: hour, notifMinute: minute);
     _save();
     if (state.reminder) _sync(notifHour: hour, notifMinute: minute);
+    _applySchedules();
   }
 
   String get lang => state.locale.languageCode;

@@ -17,6 +17,8 @@ class GameState {
   final Set<String> filled; // familles contribuées
   final int points;
   final int streak;
+  final int works; // œuvres débloquées dans la collection
+  final List<String> activity; // jours avec photo (ISO yyyy-mm-dd, 28 derniers jours)
   final Bet? bet;
   final List<InstanceSummary> instances;
   final String activeInstanceId;
@@ -39,6 +41,8 @@ class GameState {
     required this.filled,
     required this.points,
     required this.streak,
+    this.works = 0,
+    this.activity = const [],
     required this.bet,
     required this.instances,
     required this.activeInstanceId,
@@ -101,6 +105,8 @@ class GameState {
     Set<String>? filled,
     int? points,
     int? streak,
+    int? works,
+    List<String>? activity,
     Bet? bet,
     bool clearBet = false,
     List<DailyTask>? tasks,
@@ -122,6 +128,8 @@ class GameState {
         filled: filled ?? this.filled,
         points: points ?? this.points,
         streak: streak ?? this.streak,
+        works: works ?? this.works,
+        activity: activity ?? this.activity,
         bet: clearBet ? null : (bet ?? this.bet),
         instances: instances,
         activeInstanceId: activeInstanceId,
@@ -169,13 +177,39 @@ class GameNotifier extends StateNotifier<GameState> {
       }
       final myVariant = claimed ?? (variantsList.isNotEmpty ? variantsList.first : state.myVariant);
 
+      // Restore today's submissions so tasks don't reset on relaunch.
+      final submittedShared = today['submittedShared'] == true;
+      final submittedSeparate =
+          ((today['submittedSeparate'] as List?) ?? const []).whereType<String>().toSet();
+
       final sharedIds = instances.where((i) => i.mode == InstanceMode.shared).map((i) => i.id).toList();
       final tasks = <DailyTask>[
         if (sharedIds.isNotEmpty)
-          DailyTask(id: 'shared', kind: InstanceMode.shared, variant: myVariant, covers: sharedIds),
+          DailyTask(
+              id: 'shared', kind: InstanceMode.shared, variant: myVariant, covers: sharedIds, done: submittedShared),
         for (final i in instances.where((i) => i.mode == InstanceMode.separate))
-          DailyTask(id: i.id, kind: InstanceMode.separate, variant: myVariant, instanceId: i.id, instanceName: i.name),
+          DailyTask(
+              id: i.id,
+              kind: InstanceMode.separate,
+              variant: myVariant,
+              instanceId: i.id,
+              instanceName: i.name,
+              done: submittedSeparate.contains(i.id)),
       ];
+
+      // Restore the weekly bet (editable until reveal).
+      Bet? bet;
+      try {
+        final gMine = await _api.myGuess();
+        if (gMine != null) {
+          bet = Bet(
+            (gMine['titleGuess'] as String?) ?? '',
+            (gMine['dayPlaced'] as num?)?.toInt() ?? 1,
+            correct: gMine['correct'] as bool?,
+            points: (gMine['points'] as num?)?.toInt() ?? 0,
+          );
+        }
+      } catch (_) {/* keep null */}
 
       // Filled families = variants already contributed in the active instance.
       final filled = <String>{};
@@ -198,7 +232,9 @@ class GameNotifier extends StateNotifier<GameState> {
         filled: filled,
         points: (me['points'] as num?)?.toInt() ?? 0,
         streak: (me['streak'] as num?)?.toInt() ?? 0,
-        bet: null,
+        works: (me['works'] as num?)?.toInt() ?? 0,
+        activity: ((me['activity'] as List?) ?? const []).whereType<String>().toList(),
+        bet: bet,
         instances: instances,
         activeInstanceId: activeId,
         tasks: tasks,
@@ -208,6 +244,7 @@ class GameNotifier extends StateNotifier<GameState> {
 
   InstanceSummary _parseInstance(Map<String, dynamic> m) => InstanceSummary(
         id: m['id'] as String,
+        code: (m['code'] as String?) ?? '',
         name: (m['name'] as String?) ?? '',
         mode: m['mode'] == 'separate' ? InstanceMode.separate : InstanceMode.shared,
         members: (m['members'] as num?)?.toInt() ?? 1,
@@ -336,8 +373,14 @@ class GameNotifier extends StateNotifier<GameState> {
     );
   }
 
+  // Barème dégressif du pari (lun→dim) — miroir de scoring.ts.
+  static const _betBareme = [70, 50, 35, 25, 15, 10, 5];
+
   void placeBet(String title) {
-    state = state.copyWith(bet: Bet(title, state.weekDay));
+    // day_placed du serveur garde la première pose ; localement on conserve
+    // le jour du pari existant le cas échéant.
+    final day = state.bet?.day ?? state.weekDay;
+    state = state.copyWith(bet: Bet(title, day, points: _betBareme[(day - 1).clamp(0, 6)]));
     if (_useApi) _api.placeGuess(title).catchError((_) {});
   }
 }
